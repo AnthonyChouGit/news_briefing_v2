@@ -8,12 +8,14 @@ dist/
 build/
 out/
 *.tsbuildinfo
+exports/
 
 # Environment variables
 .env
 .env.*
 *.env
 !.env.example
+!example.env
 
 # Logs
 logs/
@@ -39,17 +41,11 @@ temp/
 
 # Editor & IDE
 .idea/
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+.vscode/
 *.swp
 *.swo
 *~
 
 # OS generated files
 .DS_Store
-Thumbs.db
-
 Thumbs.db
