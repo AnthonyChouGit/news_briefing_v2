@@ -15,13 +15,19 @@ export const RankNewsOptionsSchema = z.object({
 });
 export type RankNewsOptions = z.infer<typeof RankNewsOptionsSchema>;
 
-/** DAG input schema: candidate items map plus optional/nullable historical items map. */
-const RankNewsInputSchema = z.object({
+/** DAG input schema when historical context (`history_items`) is wired into this stage. */
+const RankNewsWithHistoryInputSchema = z.object({
     rank_input_items: z.instanceof(Map<NewsCategory, Map<string, BriefNews>>),
     // Nullish allows DAG callers to pass `history_items: null | undefined` when bypassing HistoryNewsOperator.
     history_items: z.instanceof(Map<NewsCategory, Map<string, BriefNews>>).nullish(),
 });
-type RankNewsInput = z.infer<typeof RankNewsInputSchema>;
+
+/** DAG input schema when ranking runs without historical context (e.g. post-summarize re-ranking). */
+const RankNewsWithoutHistoryInputSchema = z.object({
+    rank_input_items: z.instanceof(Map<NewsCategory, Map<string, BriefNews>>),
+});
+
+type RankNewsInput = z.infer<typeof RankNewsWithHistoryInputSchema>;
 
 /** DAG output schema: `category -> (hash_id -> BriefNews)` ordered best-first by AI ranking. */
 const RankNewsOutputSchema = z.object({
@@ -97,29 +103,26 @@ async function rankCategoryItems(
     aiClient: AIClient,
     signal?: AbortSignal,
 ): Promise<Map<string, BriefNews>> {
-    signal?.throwIfAborted();
-
     if (items.size === 0) {
-        return new Map<string, BriefNews>();
+        return items;
     }
 
     const hasHistory = Boolean(historyItems && historyItems.size > 0);
-    const historyIds = hasHistory ? new Set(historyItems!.keys()) : undefined;
-
-    // Fast exact-ID pre-filter before calling AI when historical items are present
-    const remainingCandidates = Array.from(items.values()).filter(
-        (item) => !historyIds?.has(item.hash_id),
-    );
-    if (remainingCandidates.length === 0) {
-        return new Map<string, BriefNews>();
+    if (hasHistory) {
+        // Fast exact-ID pre-filter in place before calling AI
+        for (const hash_id of historyItems!.keys()) {
+            items.delete(hash_id);
+        }
+        if (items.size === 0) {
+            return items;
+        }
     }
 
-    const candidateById = new Map(remainingCandidates.map((item) => [item.hash_id, item]));
     const payload = {
         category,
         current_time: new Date().toISOString(),
         has_history: hasHistory,
-        candidates: remainingCandidates,
+        candidates: [...items.values()],
         ...(hasHistory ? { covered: [...historyItems!.values()] } : {}),
     };
 
@@ -130,13 +133,13 @@ async function rankCategoryItems(
         signal,
     );
 
-    // Reconstruct Map in AI-returned order, ignoring unknown or repeated IDs
+    // Single pass: build ranked Map directly without deleting/clearing/reinserting `items`
     const ranked = new Map<string, BriefNews>();
     for (const id of response.ranked_ids) {
         if (ranked.has(id)) {
             continue;
         }
-        const item = candidateById.get(id);
+        const item = items.get(id);
         if (item) {
             ranked.set(id, item);
         }
@@ -145,7 +148,7 @@ async function rankCategoryItems(
 }
 
 /**
- * Concurrently filters, deduplicates, and AI-ranks news items per category.
+ * Concurrently filters, deduplicates, and AI-ranks news items per category in place.
  *
  * Compatible with inputs from any pipeline stage: fetch-only (`title` + `source_name`),
  * post-read (`raw`), or post-summarize (`bullets`). `history_items` is optional/nullable;
@@ -156,37 +159,45 @@ async function rankCategoryItems(
  * propagate directly to LightDag's unified error handler.
  */
 export default async function rankNews({ inputs, requires, options, signal }: OperatorArgs): Promise<OperatorOutput> {
-    signal?.throwIfAborted();
-
     const { rank_input_items, history_items } = inputs as RankNewsInput;
     const { ai_client } = requires as RankNewsRequires;
     const rank_options = options as RankNewsOptions;
 
-    const categories = Array.from(rank_input_items.keys());
-    const rankedEntries = await Promise.all(
-        categories.map(async (category): Promise<[NewsCategory, Map<string, BriefNews>]> => {
-            const items = rank_input_items.get(category)!;
-            const historyForCategory = history_items?.get(category);
-            const ranked = await rankCategoryItems(
-                category,
-                items,
-                historyForCategory,
-                ai_client,
-                signal,
-            );
-            return [category, ranked];
-        }),
-    );
+    const totalBefore = rank_options.debug
+        ? Array.from(rank_input_items.values()).reduce((sum, map) => sum + map.size, 0)
+        : 0;
 
+    const categories: NewsCategory[] = [...rank_input_items.keys()];
+    const results = await Promise.allSettled(
+        categories.map((category) =>
+            rankCategoryItems(category, rank_input_items.get(category)!, history_items?.get(category), ai_client, signal),
+        ),
+    );
     signal?.throwIfAborted();
 
-    const ranked_items = new Map<NewsCategory, Map<string, BriefNews>>(rankedEntries);
+    for (let i = 0; i < categories.length; i++) {
+        const category = categories[i]!;
+        const result = results[i]!;
+        if (result.status === "rejected") {
+            console.error(`[RANK] Category "${category}" failed:`, result.reason);
+            rank_input_items.delete(category);
+            continue;
+        }
+        if (result.value.size === 0) {
+            rank_input_items.delete(category);
+        } else if (result.value !== rank_input_items.get(category)) {
+            rank_input_items.set(category, result.value);
+        }
+    }
+
+    if (rank_input_items.size === 0) {
+        throw new Error("All categories failed or became empty during ranking.");
+    }
 
     if (rank_options.debug) {
-        const totalBefore = Array.from(rank_input_items.values()).reduce((sum, map) => sum + map.size, 0);
-        const totalAfter = Array.from(ranked_items.values()).reduce((sum, map) => sum + map.size, 0);
+        const totalAfter = Array.from(rank_input_items.values()).reduce((sum, map) => sum + map.size, 0);
         const remainingCounts = Array.from(
-            ranked_items.entries(),
+            rank_input_items.entries(),
             ([category, items]) => `${category}: ${items.size}`,
         ).join(", ");
         console.log(
@@ -194,7 +205,7 @@ export default async function rankNews({ inputs, requires, options, signal }: Op
         );
     }
 
-    const op_output: RankNewsOutput = { ranked_items };
+    const op_output: RankNewsOutput = { ranked_items: rank_input_items };
     return { branch: "default", output: op_output };
 }
 
@@ -202,8 +213,8 @@ export default async function rankNews({ inputs, requires, options, signal }: Op
 export class RankNewsOperator extends Operator {
     /** Unique operator identifier within the DAG. */
     name: string = "rank_news";
-    /** Expected DAG input schemas (`rank_input_items` and optional/nullable `history_items`). */
-    input_schema = RankNewsInputSchema;
+    /** Expected DAG input schemas (`rank_input_items` and optionally `history_items` when `use_history` is true). */
+    input_schema: z.ZodObject = RankNewsWithHistoryInputSchema;
     /** Output branch schemas (`default` only; exceptions propagate to LightDag). */
     output_schemas = { default: RankNewsOutputSchema };
     /** Required shared runtime resources (`ai_client`). */
@@ -212,4 +223,11 @@ export class RankNewsOperator extends Operator {
     options_schema = RankNewsOptionsSchema;
     /** Operator execution entrypoint. */
     exec = rankNews;
+
+    constructor(use_history: boolean = true) {
+        super();
+        this.input_schema = use_history
+            ? RankNewsWithHistoryInputSchema
+            : RankNewsWithoutHistoryInputSchema;
+    }
 }

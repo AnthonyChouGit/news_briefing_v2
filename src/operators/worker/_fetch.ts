@@ -433,16 +433,11 @@ function extractBbcSport(html: string): RawNewsItem[] {
         seen.add(rawUrlPath);
         const url = rawUrlPath.startsWith("http") ? rawUrlPath : `https://www.bbc.com${rawUrlPath}`;
         if (!isArticleUrl(url)) continue;
-        const cat = rawUrlPath.includes("football")
-            ? "football"
-            : rawUrlPath.includes("formula1")
-                ? "f1"
-                : "international";
         results.push({
             title,
             url,
             time: "",
-            category: cat,
+            category: "sports",
         });
     }
     return results;
@@ -493,7 +488,7 @@ function extractMarca(html: string): RawNewsItem[] {
         if (!url.toLowerCase().includes("/football/")) continue;
         seen.add(url);
         seen.add(title);
-        results.push({ title, url, time: "", category: "realmadrid" });
+        results.push({ title, url, time: "", category: "sports" });
     }
     return results;
 }
@@ -510,7 +505,7 @@ function extractF1(html: string): RawNewsItem[] {
                 title,
                 url,
                 time: "",
-                category: "f1",
+                category: "sports",
             });
         }
     }
@@ -731,34 +726,49 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
         category: "international",
         sourceName: "Google News",
     },
+    bbc_sport: {
+        url: "https://feeds.bbci.co.uk/sport/rss.xml",
+        category: "sports",
+        sourceName: "BBC Sport",
+    },
+    guardian_sport: {
+        url: "https://www.theguardian.com/uk/sport/rss",
+        category: "sports",
+        sourceName: "The Guardian",
+    },
+    gn_sports: {
+        url: "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=en-US&gl=US&ceid=US:en",
+        category: "sports",
+        sourceName: "Google News",
+    },
     gn_realmadrid: {
         url: "https://news.google.com/rss/search?q=%22Real+Madrid%22+when:2d&hl=en-US&gl=US&ceid=US:en",
-        category: "realmadrid",
+        category: "sports",
         sourceName: "Google News",
     },
     managing_madrid: {
         url: "https://www.managingmadrid.com/rss/index.xml",
-        category: "realmadrid",
+        category: "sports",
         sourceName: "Managing Madrid",
     },
     football_espana: {
         url: "https://football-espana.net/category/real-madrid/feed",
-        category: "realmadrid",
+        category: "sports",
         sourceName: "Football España",
     },
     gn_f1: {
         url: "https://news.google.com/rss/search?q=Formula+1+Ferrari+Leclerc&hl=en-US&gl=US&ceid=US:en",
-        category: "f1",
+        category: "sports",
         sourceName: "Google News",
     },
     racefans: {
         url: "https://www.racefans.net/feed/",
-        category: "f1",
+        category: "sports",
         sourceName: "RaceFans",
     },
     gn_mlb: {
         url: "https://news.google.com/rss/search?q=MLB+Dodgers&hl=en-US&gl=US&ceid=US:en",
-        category: "mlb",
+        category: "sports",
         sourceName: "Google News",
     },
     gn_ai: {
@@ -773,22 +783,22 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
     },
     gn_football: {
         url: "https://news.google.com/rss/search?q=(football+OR+soccer)+AND+(%22Champions+League%22+OR+%22Premier+League%22+OR+%22La+Liga%22+OR+%22Serie+A%22+OR+%22Bundesliga%22+OR+%22UEFA%22+OR+%22transfer+news%22)+-nfl+-rugby+-hockey&hl=en-US&gl=US&ceid=US:en",
-        category: "football",
+        category: "sports",
         sourceName: "Google News",
     },
     gn_wtt: {
         url: "https://news.google.com/rss/search?q=WTT+table+tennis&hl=en-US&gl=US&ceid=US:en",
-        category: "tabletennis",
+        category: "sports",
         sourceName: "Google News",
     },
     gn_ttcn: {
         url: "https://news.google.com/rss/search?q=China+table+tennis&hl=en-US&gl=US&ceid=US:en",
-        category: "tabletennis",
+        category: "sports",
         sourceName: "Google News",
     },
     motorsport: {
         url: "https://www.motorsport.com/rss/f1/news/",
-        category: "f1",
+        category: "sports",
         sourceName: "Motorsport.com",
     },
     chinanews: {
@@ -880,22 +890,23 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("gn_international", opts),
         (opts) => fetchRssFeed("gn_chinanews", opts),
     ],
-    football: [
+    sports: [
         fetchBbcSport,
+        (opts) => fetchRssFeed("bbc_sport", opts),
+        (opts) => fetchRssFeed("guardian_sport", opts),
+        (opts) => fetchRssFeed("gn_sports", opts),
         (opts) => fetchRssFeed("gn_football", opts),
-    ],
-    realmadrid: [
         fetchMarca,
         (opts) => fetchRssFeed("managing_madrid", opts),
         (opts) => fetchRssFeed("football_espana", opts),
         (opts) => fetchRssFeed("gn_realmadrid", opts),
-    ],
-    f1: [
         fetchF1,
         (opts) => fetchRssFeed("racefans", opts),
-        fetchBbcSport,
-        (opts) => fetchRssFeed("gn_f1", opts),
         (opts) => fetchRssFeed("motorsport", opts),
+        (opts) => fetchRssFeed("gn_f1", opts),
+        (opts) => fetchRssFeed("gn_mlb", opts),
+        (opts) => fetchRssFeed("gn_wtt", opts),
+        (opts) => fetchRssFeed("gn_ttcn", opts),
     ],
     ai: [
         fetchTechcrunch,
@@ -904,18 +915,11 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("tmtpost", opts),
         (opts) => fetchRssFeed("infoq_cn", opts),
     ],
-    mlb: [
-        (opts) => fetchRssFeed("gn_mlb", opts),
-    ],
     domestic: [
         fetchGlobalTimes,
         (opts) => fetchRssFeed("cgtn_china", opts),
         (opts) => fetchRssFeed("chinanews", opts),
         (opts) => fetchRssFeed("jiemian", opts),
-    ],
-    tabletennis: [
-        (opts) => fetchRssFeed("gn_wtt", opts),
-        (opts) => fetchRssFeed("gn_ttcn", opts),
     ],
 };
 

@@ -5,6 +5,8 @@ import { type BriefNews, type NewsCategory, NewsCategorySchema } from "./common/
 
 /** Runtime configuration options accepted by the history news operator. */
 export const HistoryNewsOptionsSchema = z.object({
+    /** Non-empty list of news categories to query from history. */
+    categories: z.array(NewsCategorySchema).nonempty(),
     /** Lookback time window in hours for loading historical news items. */
     history_time_window_hours: z.coerce.number().positive().default(72),
     /** Whether to log per-category history item counts after querying. */
@@ -12,11 +14,10 @@ export const HistoryNewsOptionsSchema = z.object({
 });
 export type HistoryNewsOptions = z.infer<typeof HistoryNewsOptionsSchema>;
 
-/** DAG input schema: non-empty list of news categories to query from history. */
+/** DAG input schema: dummy start signal triggering the root history operator. */
 const HistoryNewsInputSchema = z.object({
-    categories: z.array(NewsCategorySchema).nonempty(),
+    start: z.unknown(),
 });
-type HistoryNewsInput = z.infer<typeof HistoryNewsInputSchema>;
 
 /** DAG output schema: `category -> (hash_id -> BriefNews)` nested map of recent historical items. */
 const HistoryNewsOutputSchema = z.object({
@@ -31,46 +32,38 @@ const HistoryNewsRequiresSchema = z.object({
 type HistoryNewsRequires = z.infer<typeof HistoryNewsRequiresSchema>;
 
 /**
- * Loads previously stored news items within the configured lookback window
- * (`history_time_window_hours`) for each requested category using `BriefNewsRepository`.
+ * Loads previously stored news items within `history_time_window_hours` for each
+ * category configured in `options.categories` using `BriefNewsRepository`.
  *
- * Supports cooperative cancellation via LightDag's injected `signal`: checks
- * abort state up front and forwards `signal` to each Kysely query so in-flight
- * PostgreSQL queries are cancelled cleanly on abort.
+ * Expects a dummy `start` input signal as a DAG root trigger.
+ * Supports cooperative cancellation via LightDag's injected `signal`: forwards
+ * `signal` to each Kysely query so in-flight PostgreSQL queries are cancelled
+ * cleanly on abort.
  *
  * Errors propagate directly to LightDag's unified error handler instead of
  * routing through a dedicated `error` branch.
  */
-export default async function historyNews({ inputs, requires, options, signal }: OperatorArgs): Promise<OperatorOutput> {
-    signal?.throwIfAborted();
-
-    const { categories } = inputs as HistoryNewsInput;
+export default async function historyNews({ requires, options, signal }: OperatorArgs): Promise<OperatorOutput> {
     const { repository } = requires as HistoryNewsRequires;
     const history_options = options as HistoryNewsOptions;
+    const uniqueCategories = Array.from(new Set(history_options.categories));
 
-    if (categories.length === 0) {
-        throw new Error("Categories array cannot be empty.");
-    }
-
-    const uniqueCategories = Array.from(new Set(categories));
-
-    const categoryResults = await Promise.all(
-        uniqueCategories.map(async (category: NewsCategory): Promise<Map<string, BriefNews>> => {
+    const entries = await Promise.all(
+        uniqueCategories.map(async (category: NewsCategory): Promise<[NewsCategory, Map<string, BriefNews>]> => {
             const items = await repository.findRecentByHours(
                 history_options.history_time_window_hours,
                 category,
                 signal,
             );
-            return new Map<string, BriefNews>(items.map((item) => [item.hash_id, item]));
+            const map = new Map<string, BriefNews>();
+            for (const item of items) {
+                map.set(item.hash_id, item);
+            }
+            return [category, map];
         }),
     );
 
-    signal?.throwIfAborted();
-
-    const history_items = new Map<NewsCategory, Map<string, BriefNews>>();
-    for (let i = 0; i < uniqueCategories.length; i++) {
-        history_items.set(uniqueCategories[i]!, categoryResults[i]!);
-    }
+    const history_items = new Map<NewsCategory, Map<string, BriefNews>>(entries);
 
     if (history_options?.debug) {
         const categoryCounts = Array.from(
@@ -89,13 +82,13 @@ export default async function historyNews({ inputs, requires, options, signal }:
 export class HistoryNewsOperator extends Operator {
     /** Unique operator identifier within the DAG. */
     name: string = "history_news";
-    /** Expected DAG input schema (`categories`). */
+    /** Expected DAG input schema (dummy `start` signal). */
     input_schema = HistoryNewsInputSchema;
     /** Output branch schemas (`default` only; exceptions propagate to LightDag). */
     output_schemas = { default: HistoryNewsOutputSchema };
     /** Required shared runtime resources (`repository`). */
     requires_schema = HistoryNewsRequiresSchema;
-    /** Optional per-run configuration (`HistoryNewsOptions`). */
+    /** Runtime configuration (`HistoryNewsOptions`, including `categories`). */
     options_schema = HistoryNewsOptionsSchema;
     /** Operator execution entrypoint. */
     exec = historyNews;

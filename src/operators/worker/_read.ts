@@ -303,6 +303,7 @@ function extractGeneric(html: string): string {
 const SOURCE_NAME_EXTRACTORS: Record<string, HtmlExtractor> = {
     "BBC": extractBbc,
     "BBC Sport": extractBbc,
+    "The Guardian": extractGeneric,
     "CNN": extractCnn,
     "TechCrunch": extractTechcrunch,
     "Marca": extractMarca,
@@ -332,6 +333,8 @@ const HOST_EXTRACTORS: Record<string, HtmlExtractor> = {
     "bbc.com": extractBbc,
     "www.bbc.co.uk": extractBbc,
     "bbc.co.uk": extractBbc,
+    "www.theguardian.com": extractGeneric,
+    "theguardian.com": extractGeneric,
     "edition.cnn.com": extractCnn,
     "www.cnn.com": extractCnn,
     "cnn.com": extractCnn,

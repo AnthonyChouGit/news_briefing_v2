@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "CONFIG_PATH=./test.env npx tsx src/main.ts",
+    "test_cron": "CONFIG_PATH=./test.env npx tsx src/cron_main.ts",
+    "build": "rm -rf build && tsc && cp package.json package-lock.json Dockerfile docker-compose.yml run_once.sh init.sql example.env build/ && ( [ -f src/.env ] && cp src/.env build/.env || [ -f .env ] && cp .env build/.env || true ) && chmod +x build/run_once.sh",
+    "start": "node ./build/dist/main.js",
+    "start:cron": "node ./build/dist/cron_main.js"
   },
   "keywords": [],
   "author": "",
@@ -21,11 +25,13 @@
     "@ai-sdk/openai": "^4.0.118",
     "@ai-sdk/openai-compatible": "^3.0.92",
     "ai": "^7.0.173",
+    "cron": "^4.4.0",
     "dotenv": "^18.0.10",
     "jsonrepair": "^3.15.0",
     "kysely": "^0.29.9",
     "light-dag": "^0.1.0",
     "pg": "^8.23.1",
+    "piscina": "^5.3.2",
     "zod": "^4.6.7"
   }
 }

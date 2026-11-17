@@ -76,6 +76,38 @@ export class BriefNewsRepository {
             .execute({ signal, inflightQueryAbortStrategy: "cancel query" });
     }
 
+    /**
+     * Deletes news items whose `source_date` is strictly older than `hours` hours ago,
+     * optionally scoped to a single category.
+     *
+     * @returns Number of deleted rows.
+     */
+    async deleteOlderThanHours(
+        hours: number,
+        category?: BriefNews["category"],
+        signal?: AbortSignal,
+    ): Promise<number> {
+        if (!Number.isFinite(hours) || hours <= 0) {
+            throw new RangeError(`Expected positive finite hours, received: ${hours}`);
+        }
+
+        const beforeDate = new Date(Date.now() - hours * 60 * 60 * 1000);
+        let query = this.db
+            .deleteFrom("brief_news")
+            .where("source_date", "<", beforeDate);
+
+        if (category !== undefined) {
+            query = query.where("category", "=", category);
+        }
+
+        // Forward AbortSignal to Kysely and cancel any in-flight PostgreSQL query on abort
+        const result = await query.executeTakeFirst({
+            signal,
+            inflightQueryAbortStrategy: "cancel query",
+        });
+        return Number(result?.numDeletedRows ?? 0n);
+    }
+
     async release() {
         await this.db.destroy();
     }
