@@ -59,7 +59,7 @@ You will receive a JSON object containing:
 - \`category\`: News category name.
 - \`current_time\`: Current UTC ISO-8601 timestamp for evaluating timeliness.
 - \`has_history\`: Boolean indicating whether historical briefing articles (\`covered\`) are present.
-- \`candidates\`: Candidate \`BriefNews\` articles to filter, deduplicate, and rank. Each item includes \`hash_id\`, \`title\`, \`url\`, \`source_name\`, \`source_date\` (may be a default fallback such as \`1970-01-01\` / epoch 0 at the fetch stage), \`category\`, and optionally \`bullets\` (post-summarization points) and/or \`raw\` (post-read article text or feed summary). Fetch-stage items may have only \`title\`, \`url\`, and \`source_name\` without \`bullets\` or \`raw\`.
+- \`candidates\`: Candidate \`BriefNews\` articles to filter, deduplicate, and rank. Each item includes \`hash_id\`, \`title\`, \`url\`, \`source_name\`, \`source_date\` (may be a default fallback such as \`1970-01-01\` / epoch 0 at the fetch stage), \`category\`, and optionally \`bullets\` (post-summarization points; absent at the fetch stage).
 ${hasHistory ? "- `covered`: Historical `BriefNews` articles already published in previous briefings (for historical deduplication and topic differentiation).\n" : ""}
 Execute the following pipeline strictly in order:
 
@@ -68,7 +68,7 @@ OMIT from your output any candidate that falls into these categories:
 - Advertisements, sponsored content, advertorials, product promos, shopping deals/coupons, betting promos, or commercial PR fluff.
 - Non-substantive items: clickbait teasers with no factual information, vague placeholders, navigation/cookie/login boilerplate, error pages, garbled scrapes, or media-only pages lacking reportable news.
 - Trivial filler, pure rumors, or extremely low-value content unfit for a serious news briefing.
-- **Stage Compatibility Rule**: Candidates from the fetch stage carry only \`title\`, \`url\`, and \`source_name\` (no \`bullets\` or \`raw\`). Do NOT reject a legitimate news headline merely because \`raw\` or \`bullets\` is missing — judge its substance, newsworthiness, and ad likelihood from headline specificity, URL cues, and \`source_name\`. When \`bullets\` or \`raw\` IS present and non-empty, inspect it carefully to catch thin clickbait, hidden promos, or broken scrapes.
+- **Stage Compatibility Rule**: Candidates from the fetch stage carry only metadata (\`title\`, \`url\`, \`source_name\`, \`source_date\`, \`category\`) without \`bullets\`. Do NOT reject a legitimate news headline merely because \`bullets\` is missing — judge its substance, newsworthiness, and ad likelihood from headline specificity, URL cues, and \`source_name\`. When \`bullets\` IS present and non-empty, inspect it carefully to catch thin clickbait or shallow filler.
 
 ### Step 2: Deduplication
 1. **Intra-Batch Deduplication (Always Apply)**:
@@ -118,12 +118,16 @@ async function rankCategoryItems(
         }
     }
 
+    // Omit `raw` when serializing to AI so long article bodies are sent only during summarization,
+    // while keeping the full BriefNews objects intact in `items` for downstream `read_news` / `save_news`.
+    const withoutRaw = ({ raw: _raw, ...rest }: BriefNews): Omit<BriefNews, "raw"> => rest;
+
     const payload = {
         category,
         current_time: new Date().toISOString(),
         has_history: hasHistory,
-        candidates: [...items.values()],
-        ...(hasHistory ? { covered: [...historyItems!.values()] } : {}),
+        candidates: Array.from(items.values(), withoutRaw),
+        ...(hasHistory ? { covered: Array.from(historyItems!.values(), withoutRaw) } : {}),
     };
 
     const response = await aiClient.ask(
@@ -150,8 +154,9 @@ async function rankCategoryItems(
 /**
  * Concurrently filters, deduplicates, and AI-ranks news items per category in place.
  *
- * Compatible with inputs from any pipeline stage: fetch-only (`title` + `source_name`),
- * post-read (`raw`), or post-summarize (`bullets`). `history_items` is optional/nullable;
+ * Compatible with inputs from any pipeline stage: fetch-only (`title` + `source_name`) or
+ * post-summarize (`bullets`); `raw` bodies are omitted from AI payloads so full article text
+ * is reserved for summarization. `history_items` is optional/nullable;
  * cross-history deduplication and historical differentiation are enabled for a category
  * only when its historical map is present and non-empty.
  *

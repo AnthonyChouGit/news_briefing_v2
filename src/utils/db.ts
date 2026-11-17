@@ -43,15 +43,28 @@ export class BriefNewsRepository {
         });
     }
 
+    /**
+     * Queries recently stored news items within `hours`, omitting `raw` bodies
+     * since `raw` is archived for storage only and not needed for history deduplication.
+     */
     async findRecentByHours(
         hours: number,
-        category ?: BriefNews["category"],
-        signal ?: AbortSignal,
-    ): Promise < BriefNewsSelect[] > {
+        category?: BriefNews["category"],
+        signal?: AbortSignal,
+    ): Promise<Omit<BriefNewsSelect, "raw">[]> {
         const sinceDate = new Date(Date.now() - hours * 60 * 60 * 1000);
         let query = this.db
             .selectFrom("brief_news")
-            .selectAll()
+            .select([
+                "hash_id",
+                "url",
+                "title",
+                "source_date",
+                "source_name",
+                "category",
+                "bullets",
+                "created_at",
+            ])
             .where("source_date", ">=", sinceDate);
 
         if(category !== undefined) {

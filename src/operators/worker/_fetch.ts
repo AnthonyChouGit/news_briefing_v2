@@ -15,6 +15,7 @@ const USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
     "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 const MAX_DECODE_ITEMS = 5;
+const MAX_ITEMS_PER_SOURCE = 20;
 const DROP_PARAMS = new Set([
     "fbclid", "gclid", "cmpid", "ocid", "ref", "source",
 ]);
@@ -92,11 +93,12 @@ function canonicalUrl(rawUrl: string): string {
         const parsed = new URL(url.includes("://") ? url : `https://${url}`);
         let host = parsed.hostname.toLowerCase();
         if (host.startsWith("www.")) host = host.slice(4);
+        if (host === "bbc.co.uk") host = "bbc.com";
         const path = parsed.pathname.replace(/\/+$/, "") || "/";
         const filteredParams: Array<[string, string]> = [];
         parsed.searchParams.forEach((v, k) => {
             const kl = k.toLowerCase();
-            if (!kl.startsWith("utm_") && !DROP_PARAMS.has(kl)) {
+            if (!kl.startsWith("utm_") && !kl.startsWith("at_") && !DROP_PARAMS.has(kl)) {
                 filteredParams.push([k, v]);
             }
         });
@@ -422,27 +424,6 @@ async function resolveGoogleNewsUrls(
 
 // ─── Source Extractors ───────────────────────────────────────
 
-function extractBbcSport(html: string): RawNewsItem[] {
-    const results: RawNewsItem[] = [];
-    const seen = new Set<string>();
-    const pattern = /href="((?:https:\/\/www\.bbc\.com)?\/sport\/[^"]+\/articles\/[^"]+)"[^>]*>(.*?)<\/a>/gs;
-    for (const m of html.matchAll(pattern)) {
-        const rawUrlPath = m[1] ?? "";
-        const title = stripTags(m[2] ?? "");
-        if (!title || title.length < 10 || seen.has(rawUrlPath)) continue;
-        seen.add(rawUrlPath);
-        const url = rawUrlPath.startsWith("http") ? rawUrlPath : `https://www.bbc.com${rawUrlPath}`;
-        if (!isArticleUrl(url)) continue;
-        results.push({
-            title,
-            url,
-            time: "",
-            category: "sports",
-        });
-    }
-    return results;
-}
-
 function extractCnn(html: string): RawNewsItem[] {
     const results: RawNewsItem[] = [];
     const seenUrls = new Set<string>();
@@ -465,7 +446,7 @@ function extractCnn(html: string): RawNewsItem[] {
         seenUrls.add(fullUrl);
         results.push({ title, url: fullUrl, time: "", category: "international" });
     }
-    return results.slice(0, 50);
+    return results;
 }
 
 function extractMarca(html: string): RawNewsItem[] {
@@ -559,7 +540,7 @@ function extractGlobalTimes(html: string): RawNewsItem[] {
         seenUrls.add(url);
         results.push({ title, url, time: "", category: "domestic" });
     }
-    return results.slice(0, 30);
+    return results;
 }
 
 /**
@@ -649,7 +630,8 @@ async function fetchAndExtractHtml(
 ): Promise<BriefNews[]> {
     try {
         const html = await fetchText(url, options);
-        return extractor(html).map((item) => toBriefNews(item, sourceName));
+        const limit = options?.fetch_max_items_per_source ?? MAX_ITEMS_PER_SOURCE;
+        return extractor(html).slice(0, limit).map((item) => toBriefNews(item, sourceName));
     } catch (error) {
         if (error instanceof Error) {
             logExpectedError(error);
@@ -657,10 +639,6 @@ async function fetchAndExtractHtml(
         }
         throw error;
     }
-}
-
-async function fetchBbcSport(options?: FetchOptions): Promise<BriefNews[]> {
-    return fetchAndExtractHtml("https://www.bbc.com/sport", "BBC Sport", extractBbcSport, options);
 }
 
 async function fetchCnnWorld(options?: FetchOptions): Promise<BriefNews[]> {
@@ -841,13 +819,14 @@ async function fetchRssFeed(feedKey: string, options?: FetchOptions): Promise<Br
             item.category = config.category;
         }
 
+        const maxItems = options?.fetch_max_items_per_source ?? MAX_ITEMS_PER_SOURCE;
         // Collect URLs to resolve (limit to MAX_DECODE_ITEMS)
         const limit = options?.fetch_max_decode_items ?? MAX_DECODE_ITEMS;
         const urlsToResolve = rawItems.slice(0, limit).map((item) => item.url);
         const resolved = await resolveGoogleNewsUrls(urlsToResolve, options);
 
         const results: BriefNews[] = [];
-        for (let i = 0; i < rawItems.length; i++) {
+        for (let i = 0; i < rawItems.length && results.length < maxItems; i++) {
             const item = rawItems[i]!;
             if (i < resolved.length) {
                 const result = resolved[i]!;
@@ -891,7 +870,6 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("gn_chinanews", opts),
     ],
     sports: [
-        fetchBbcSport,
         (opts) => fetchRssFeed("bbc_sport", opts),
         (opts) => fetchRssFeed("guardian_sport", opts),
         (opts) => fetchRssFeed("gn_sports", opts),

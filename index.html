@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>每日新闻简报</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='100%25' stop-color='%234f46e5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Crect x='7' y='8.5' width='18' height='4' rx='1.8' fill='%23ffffff'/%3E%3Ccircle cx='8.5' cy='16.5' r='1.5' fill='%23bfdbfe'/%3E%3Crect x='12' y='15.3' width='13' height='2.4' rx='1.2' fill='%23ffffff' fill-opacity='0.94'/%3E%3Ccircle cx='8.5' cy='22' r='1.5' fill='%23bfdbfe'/%3E%3Crect x='12' y='20.8' width='10' height='2.4' rx='1.2' fill='%23ffffff' fill-opacity='0.94'/%3E%3C/svg%3E" />
+    <style>
+        :root {
+            --bg: #f6f8fb;
+            --surface: #ffffff;
+            --surface-muted: #eef2f7;
+            --track-bg: #eaeff6;
+            --slider-bg: #ffffff;
+            --slider-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
+            --border: #e5e9f0;
+            --border-hover: #cbd5e1;
+            --text: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #64748b;
+            --accent: #2563eb;
+            --accent-soft: #eff6ff;
+            --accent-text: #1d4ed8;
+            --ok: #10b981;
+            --cat-international-bg: #eef2ff;
+            --cat-international-fg: #3730a3;
+            --cat-domestic-bg: #ecfdf5;
+            --cat-domestic-fg: #047857;
+            --cat-ai-bg: #f5f3ff;
+            --cat-ai-fg: #6d28d9;
+            --cat-sports-bg: #fff7ed;
+            --cat-sports-fg: #c2410c;
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+            --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.06);
+            --radius: 14px;
+            --header-bg: rgba(246, 248, 251, 0.88);
+        }
+
+        [data-theme="dark"] {
+            --bg: #0b111e;
+            --surface: #121a2b;
+            --surface-muted: #1a2439;
+            --track-bg: #0f1626;
+            --slider-bg: #22304b;
+            --slider-shadow: 0 2px 6px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            --border: #1e293b;
+            --border-hover: #334155;
+            --text: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --accent: #60a5fa;
+            --accent-soft: rgba(59, 130, 246, 0.16);
+            --accent-text: #93c5fd;
+            --ok: #34d399;
+            --cat-international-bg: rgba(99, 102, 241, 0.16);
+            --cat-international-fg: #a5b4fc;
+            --cat-domestic-bg: rgba(16, 185, 129, 0.16);
+            --cat-domestic-fg: #6ee7b7;
+            --cat-ai-bg: rgba(139, 92, 246, 0.16);
+            --cat-ai-fg: #c4b5fd;
+            --cat-sports-bg: rgba(249, 115, 22, 0.16);
+            --cat-sports-fg: #fdba74;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
+            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.38);
+            --header-bg: rgba(11, 17, 30, 0.88);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .topbar-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 13px 0 10px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .brand-mark {
+            width: 8px;
+            height: 22px;
+            border-radius: 4px;
+            background: linear-gradient(180deg, var(--accent), #6366f1);
+            flex-shrink: 0;
+        }
+
+        .brand-title {
+            margin: 0;
+            font-size: 19px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .count-pill {
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--surface-muted);
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-secondary);
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.16s ease;
+        }
+
+        .icon-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text);
+        }
+
+        .icon-btn.spinning svg {
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Sliding Edition Switcher Bar (Latest vs Previous + both timestamps) */
+        .edition-bar {
+            padding: 0 0 12px;
+        }
+
+        .edition-switch {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            padding: 4px;
+            background: var(--track-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            gap: 4px;
+        }
+
+        .edition-slider {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            left: 4px;
+            width: calc(50% - 6px);
+            background: var(--slider-bg);
+            border-radius: 9px;
+            box-shadow: var(--slider-shadow);
+            transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+            pointer-events: none;
+        }
+
+        .edition-switch[data-issue="previous"] .edition-slider {
+            transform: translateX(calc(100% + 4px));
+        }
+
+        .edition-btn {
+            position: relative;
+            z-index: 1;
+            border: 0;
+            background: transparent;
+            padding: 7px 14px;
+            border-radius: 9px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--text-secondary);
+            transition: color 0.18s ease;
+            min-width: 0;
+        }
+
+        .edition-btn:hover {
+            color: var(--text);
+        }
+
+        .edition-btn.active {
+            color: var(--text);
+        }
+
+        .edition-name {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13.5px;
+            font-weight: 600;
+        }
+
+        .edition-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            opacity: 0.4;
+            transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .edition-btn.ready .edition-dot {
+            background: var(--ok);
+            opacity: 0.85;
+        }
+
+        .edition-btn.active.ready .edition-dot {
+            transform: scale(1.15);
+            opacity: 1;
+        }
+
+        .edition-time {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .edition-btn.active .edition-time {
+            color: var(--text-secondary);
+        }
+
+        .weather-ticker {
+            margin: 14px 0 2px;
+            height: 38px;
+            padding: 0 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 11px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            overflow: hidden;
+        }
+
+        .weather-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: var(--accent-soft);
+            color: var(--accent-text);
+            font-size: 11.5px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .weather-viewport {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            -webkit-mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+        }
+
+        .weather-track {
+            display: flex;
+            align-items: center;
+            width: max-content;
+            animation: weatherMarquee 28s linear infinite;
+            will-change: transform;
+        }
+
+        .weather-ticker:hover .weather-track,
+        .weather-ticker:focus-within .weather-track {
+            animation-play-state: paused;
+        }
+
+        .weather-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 24px;
+            padding-right: 24px;
+            flex-shrink: 0;
+        }
+
+        .weather-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12.5px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .weather-city {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .weather-temp {
+            font-weight: 600;
+            color: var(--accent-text);
+        }
+
+        .weather-sep {
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+
+        .weather-static {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12.5px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .weather-retry {
+            border: 0;
+            background: transparent;
+            color: var(--accent-text);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        .weather-retry:hover {
+            background: var(--accent-soft);
+        }
+
+        @keyframes weatherMarquee {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .weather-track {
+                animation: none;
+            }
+            .weather-viewport {
+                overflow-x: auto;
+                -webkit-mask-image: none;
+                mask-image: none;
+            }
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 0 6px;
+            flex-wrap: wrap;
+        }
+
+        .tabs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text);
+        }
+
+        .tab-btn.active {
+            background: var(--accent-soft);
+            border-color: transparent;
+            color: var(--accent-text);
+            font-weight: 600;
+        }
+
+        .tab-count {
+            font-size: 11.5px;
+            opacity: 0.78;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .search-wrap {
+            position: relative;
+            flex: 0 1 250px;
+            min-width: 190px;
+        }
+
+        .search-input {
+            width: 100%;
+            height: 34px;
+            padding: 0 30px 0 32px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .search-input::-webkit-search-cancel-button {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .clear-btn {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            border: 0;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .clear-btn.visible {
+            display: inline-flex;
+        }
+
+        .clear-btn:hover {
+            background: var(--surface-muted);
+            color: var(--text);
+        }
+
+        main {
+            padding: 8px 0 56px;
+        }
+
+        .content-stage.animate-enter {
+            animation: stageEnter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        @keyframes stageEnter {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .category-section {
+            margin-top: 22px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 0 2px;
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+        }
+
+        .section-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .section-badge {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .news-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            box-shadow: var(--shadow-sm);
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .news-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-md);
+        }
+
+        .card-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .card-meta-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .cat-pill {
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.02em;
+        }
+
+        .cat-international { background: var(--cat-international-bg); color: var(--cat-international-fg); }
+        .cat-domestic      { background: var(--cat-domestic-bg);      color: var(--cat-domestic-fg); }
+        .cat-ai            { background: var(--cat-ai-bg);            color: var(--cat-ai-fg); }
+        .cat-sports        { background: var(--cat-sports-bg);        color: var(--cat-sports-fg); }
+        .cat-default       { background: var(--surface-muted);        color: var(--text-secondary); }
+
+        .source-name {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .pub-time {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 600;
+            line-height: 1.48;
+            letter-spacing: -0.005em;
+        }
+
+        .card-link {
+            color: var(--text);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .card-link:hover {
+            color: var(--accent);
+        }
+
+        .ext-icon {
+            opacity: 0.4;
+            flex-shrink: 0;
+            transform: translateY(1px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+
+        .card-link:hover .ext-icon {
+            opacity: 0.9;
+            transform: translate(1px, 0);
+        }
+
+        .bullet-list {
+            margin: 12px 0 0;
+            padding: 0;
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .bullet-item {
+            position: relative;
+            padding-left: 16px;
+            font-size: 14.5px;
+            line-height: 1.72;
+            color: var(--text-secondary);
+        }
+
+        .bullet-item::before {
+            content: "";
+            position: absolute;
+            left: 3px;
+            top: 0.65em;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            opacity: 0.5;
+        }
+
+        .state-box {
+            margin-top: 26px;
+            padding: 52px 24px;
+            text-align: center;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-muted);
+        }
+
+        .state-icon {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 12px;
+            border-radius: 12px;
+            background: var(--surface-muted);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .state-title {
+            margin: 0 0 6px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .state-desc {
+            margin: 0;
+            font-size: 13.5px;
+        }
+
+        .retry-btn {
+            margin-top: 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-muted);
+            color: var(--text);
+            padding: 7px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+        }
+
+        .retry-btn:hover {
+            border-color: var(--border-hover);
+        }
+
+        .skeleton-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-top: 12px;
+        }
+
+        .sk-line {
+            height: 12px;
+            border-radius: 6px;
+            background: linear-gradient(90deg, var(--surface-muted) 25%, var(--border) 50%, var(--surface-muted) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.3s infinite;
+        }
+
+        .sk-w30 { width: 28%; height: 11px; margin-bottom: 12px; }
+        .sk-w75 { width: 78%; height: 18px; margin-bottom: 14px; }
+        .sk-w95 { width: 95%; margin-bottom: 8px; }
+        .sk-w85 { width: 85%; }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .back-top {
+            position: fixed;
+            right: 22px;
+            bottom: 24px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-secondary);
+            box-shadow: var(--shadow-md);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s ease, color 0.15s ease;
+        }
+
+        .back-top.visible {
+            display: inline-flex;
+        }
+
+        .back-top:hover {
+            color: var(--text);
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 640px) {
+            .container { padding: 0 14px; }
+            .news-card { padding: 15px 16px; }
+            .card-title { font-size: 16px; }
+            .search-wrap { flex: 1 1 100%; }
+            .edition-btn {
+                flex-direction: column;
+                gap: 2px;
+                padding: 7px 8px;
+            }
+            .edition-time { font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="container">
+            <div class="topbar-main">
+                <div class="brand">
+                    <span class="brand-mark" aria-hidden="true"></span>
+                    <h1 class="brand-title">每日新闻简报</h1>
+                    <span class="count-pill" id="activeCountPill"></span>
+                </div>
+
+                <div class="header-controls">
+                    <button type="button" class="icon-btn" id="refreshBtn" title="刷新简报" aria-label="刷新简报">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                            <polyline points="21 3 21 9 15 9" />
+                        </svg>
+                    </button>
+                    <button type="button" class="icon-btn" id="themeBtn" title="切换深浅色主题" aria-label="切换深浅色主题">
+                        <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="4" />
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="edition-bar">
+                <div class="edition-switch" id="editionSwitch" data-issue="latest" role="tablist" aria-label="简报期数">
+                    <span class="edition-slider" aria-hidden="true"></span>
+                    <button type="button" class="edition-btn active" id="editionBtnLatest" data-issue="latest" role="tab" aria-selected="true">
+                        <span class="edition-name">
+                            <span class="edition-dot" aria-hidden="true"></span>
+                            <span>最新一期</span>
+                        </span>
+                        <span class="edition-time" id="editionTimeLatest">加载中...</span>
+                    </button>
+                    <button type="button" class="edition-btn" id="editionBtnPrevious" data-issue="previous" role="tab" aria-selected="false">
+                        <span class="edition-name">
+                            <span class="edition-dot" aria-hidden="true"></span>
+                            <span>上一期</span>
+                        </span>
+                        <span class="edition-time" id="editionTimePrevious">加载中...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="weather-ticker" id="weatherTicker" aria-label="深圳与成都实时天气">
+            <span class="weather-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+                </svg>
+                <span>天气</span>
+            </span>
+            <div class="weather-viewport" id="weatherViewport">
+                <span class="weather-static">正在获取深圳、成都天气...</span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="tabs" id="categoryTabs" role="tablist" aria-label="新闻分类"></div>
+            <div class="search-wrap">
+                <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input type="search" id="searchInput" class="search-input" placeholder="搜索标题、要点或来源..." aria-label="搜索新闻" />
+                <button type="button" id="clearSearchBtn" class="clear-btn" aria-label="清空搜索">×</button>
+            </div>
+        </div>
+
+        <main id="content" class="content-stage" aria-live="polite"></main>
+    </div>
+
+    <button type="button" class="back-top" id="backTopBtn" title="返回顶部" aria-label="返回顶部">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15" />
+        </svg>
+    </button>
+
+    <script>
+        (() => {
+            const ENDPOINTS = {
+                latest: "/api/news/chinese/latest",
+                previous: "/api/news/chinese/previous",
+            };
+
+            const WEATHER_CITIES = [
+                { name: "深圳", lat: 22.5431, lon: 114.0579 },
+                { name: "成都", lat: 30.5728, lon: 104.0668 },
+            ];
+            const WEATHER_ENDPOINT =
+                `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_CITIES.map((c) => c.lat).join(",")}` +
+                `&longitude=${WEATHER_CITIES.map((c) => c.lon).join(",")}` +
+                "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day" +
+                "&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Asia%2FShanghai&forecast_days=2";
+
+            const CATEGORY_META = {
+                international: { label: "国际", cls: "cat-international" },
+                domestic: { label: "国内", cls: "cat-domestic" },
+                ai: { label: "AI 科技", cls: "cat-ai" },
+                sports: { label: "体育", cls: "cat-sports" },
+            };
+
+            const CATEGORY_ORDER = ["international", "domestic", "ai", "sports"];
+
+            const state = {
+                issue: "latest",
+                activeCategory: "all",
+                query: "",
+                cache: {
+                    latest: { status: "idle", data: null },
+                    previous: { status: "idle", data: null },
+                },
+                controller: null,
+            };
+
+            const activeCountPillEl = document.getElementById("activeCountPill");
+            const editionSwitchEl = document.getElementById("editionSwitch");
+            const editionBtns = {
+                latest: document.getElementById("editionBtnLatest"),
+                previous: document.getElementById("editionBtnPrevious"),
+            };
+            const editionTimes = {
+                latest: document.getElementById("editionTimeLatest"),
+                previous: document.getElementById("editionTimePrevious"),
+            };
+            const tabsEl = document.getElementById("categoryTabs");
+            const searchInputEl = document.getElementById("searchInput");
+            const clearSearchBtn = document.getElementById("clearSearchBtn");
+            const contentEl = document.getElementById("content");
+            const refreshBtn = document.getElementById("refreshBtn");
+            const weatherViewportEl = document.getElementById("weatherViewport");
+            const themeBtn = document.getElementById("themeBtn");
+            const themeIconEl = document.getElementById("themeIcon");
+            const backTopBtn = document.getElementById("backTopBtn");
+
+            function getCategoryInfo(cat) {
+                return CATEGORY_META[cat] || { label: String(cat), cls: "cat-default" };
+            }
+
+            function safeHttpUrl(rawUrl) {
+                if (typeof rawUrl !== "string") return null;
+                try {
+                    const parsed = new URL(rawUrl, window.location.origin);
+                    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+                        return parsed.href;
+                    }
+                } catch {
+                    return null;
+                }
+                return null;
+            }
+
+            function pad2(n) {
+                return String(n).padStart(2, "0");
+            }
+
+            function formatFullDateTime(isoStr) {
+                if (!isoStr) return "";
+                const d = new Date(isoStr);
+                if (Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return "";
+                return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+            }
+
+            function formatShortDateTime(isoStr) {
+                if (!isoStr) return "";
+                const d = new Date(isoStr);
+                if (Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return "";
+                return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+            }
+
+            function formatRelativeTime(isoStr) {
+                if (!isoStr) return "";
+                const ts = new Date(isoStr).getTime();
+                if (Number.isNaN(ts) || ts <= 86400000) return "";
+                const diffMin = Math.floor((Date.now() - ts) / 60000);
+                if (diffMin < 1) return "刚刚";
+                if (diffMin < 60) return `${diffMin} 分钟前`;
+                const diffHour = Math.floor(diffMin / 60);
+                if (diffHour < 24) return `${diffHour} 小时前`;
+                const diffDay = Math.floor(diffHour / 24);
+                return `${diffDay} 天前`;
+            }
+
+            function orderedCategories(itemsObj) {
+                const keys = Object.keys(itemsObj || {});
+                const known = CATEGORY_ORDER.filter((k) => keys.includes(k));
+                const extra = keys.filter((k) => !CATEGORY_ORDER.includes(k));
+                return [...known, ...extra];
+            }
+
+            function countTotalItems(data) {
+                if (!data || !data.items || typeof data.items !== "object") return 0;
+                return Object.values(data.items).reduce(
+                    (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
+                    0
+                );
+            }
+
+            function readSavedTheme() {
+                try {
+                    return localStorage.getItem("news_briefing_theme");
+                } catch {
+                    return null;
+                }
+            }
+
+            function saveTheme(theme) {
+                try {
+                    localStorage.setItem("news_briefing_theme", theme);
+                } catch {
+                    // Ignore storage restrictions in private browsing
+                }
+            }
+
+            function applyTheme(theme) {
+                document.documentElement.setAttribute("data-theme", theme);
+                saveTheme(theme);
+                themeIconEl.innerHTML = theme === "dark"
+                    ? '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />'
+                    : '<circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />';
+            }
+
+            function initTheme() {
+                const saved = readSavedTheme();
+                if (saved === "dark" || saved === "light") {
+                    applyTheme(saved);
+                    return;
+                }
+                const preferDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+                applyTheme(preferDark ? "dark" : "light");
+            }
+
+            function triggerStageAnimation() {
+                contentEl.classList.remove("animate-enter");
+                void contentEl.offsetWidth;
+                contentEl.classList.add("animate-enter");
+            }
+
+            function syncEditionHeader() {
+                editionSwitchEl.dataset.issue = state.issue;
+
+                for (const issue of ["latest", "previous"]) {
+                    const slot = state.cache[issue];
+                    const btn = editionBtns[issue];
+                    const timeEl = editionTimes[issue];
+                    const isActive = state.issue === issue;
+
+                    btn.classList.toggle("active", isActive);
+                    btn.classList.toggle("ready", slot.status === "ready");
+                    btn.setAttribute("aria-selected", String(isActive));
+
+                    if (slot.status === "loading" || slot.status === "idle") {
+                        timeEl.textContent = "加载中...";
+                        btn.removeAttribute("title");
+                    } else if (slot.status === "ready" && slot.data) {
+                        const formatted = formatFullDateTime(slot.data.exported_at);
+                        const rel = formatRelativeTime(slot.data.exported_at);
+                        if (formatted) {
+                            timeEl.textContent = `生成于 ${formatted}`;
+                            btn.title = rel ? `生成于 ${formatted} (${rel})` : `生成于 ${formatted}`;
+                        } else {
+                            timeEl.textContent = "尚未生成";
+                            btn.removeAttribute("title");
+                        }
+                    } else {
+                        timeEl.textContent = "尚未生成";
+                        btn.removeAttribute("title");
+                    }
+                }
+
+                const activeSlot = state.cache[state.issue];
+                if (activeSlot.status === "ready" && activeSlot.data) {
+                    activeCountPillEl.textContent = `${countTotalItems(activeSlot.data)} 条`;
+                    activeCountPillEl.style.display = "inline-block";
+                } else {
+                    activeCountPillEl.textContent = "";
+                    activeCountPillEl.style.display = "none";
+                }
+            }
+
+            function renderLoading() {
+                contentEl.innerHTML = "";
+                for (let i = 0; i < 3; i++) {
+                    const card = document.createElement("div");
+                    card.className = "skeleton-card";
+                    card.innerHTML = '<div class="sk-line sk-w30"></div><div class="sk-line sk-w75"></div><div class="sk-line sk-w95"></div><div class="sk-line sk-w85"></div>';
+                    contentEl.appendChild(card);
+                }
+            }
+
+            function renderStateBox(titleText, descText, withRetry) {
+                contentEl.innerHTML = "";
+                const box = document.createElement("div");
+                box.className = "state-box";
+
+                const iconWrap = document.createElement("div");
+                iconWrap.className = "state-icon";
+                iconWrap.setAttribute("aria-hidden", "true");
+                iconWrap.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>';
+                box.appendChild(iconWrap);
+
+                const title = document.createElement("p");
+                title.className = "state-title";
+                title.textContent = titleText;
+                box.appendChild(title);
+
+                const desc = document.createElement("p");
+                desc.className = "state-desc";
+                desc.textContent = descText;
+                box.appendChild(desc);
+
+                if (withRetry) {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "retry-btn";
+                    btn.textContent = "重新加载";
+                    btn.addEventListener("click", () => loadBriefings(true));
+                    box.appendChild(btn);
+                }
+
+                contentEl.appendChild(box);
+            }
+
+            function matchesQuery(item, q) {
+                if (!q) return true;
+                const needle = q.toLowerCase();
+                if ((item.title || "").toLowerCase().includes(needle)) return true;
+                if ((item.source_name || "").toLowerCase().includes(needle)) return true;
+                if (Array.isArray(item.bullets)) {
+                    return item.bullets.some((b) => String(b).toLowerCase().includes(needle));
+                }
+                return false;
+            }
+
+            function createNewsCard(item, catKey) {
+                const article = document.createElement("article");
+                article.className = "news-card";
+
+                const meta = document.createElement("div");
+                meta.className = "card-meta";
+
+                const metaLeft = document.createElement("div");
+                metaLeft.className = "card-meta-left";
+
+                const info = getCategoryInfo(item.category || catKey);
+                const pill = document.createElement("span");
+                pill.className = `cat-pill ${info.cls}`;
+                pill.textContent = info.label;
+                metaLeft.appendChild(pill);
+
+                if (item.source_name) {
+                    const source = document.createElement("span");
+                    source.className = "source-name";
+                    source.textContent = item.source_name;
+                    metaLeft.appendChild(source);
+                }
+                meta.appendChild(metaLeft);
+
+                const formattedDate = formatShortDateTime(item.source_date);
+                if (formattedDate) {
+                    const timeEl = document.createElement("time");
+                    timeEl.className = "pub-time";
+                    timeEl.dateTime = item.source_date;
+                    const rel = formatRelativeTime(item.source_date);
+                    timeEl.textContent = rel ? `${formattedDate} · ${rel}` : formattedDate;
+                    meta.appendChild(timeEl);
+                }
+
+                article.appendChild(meta);
+
+                const titleEl = document.createElement("h3");
+                titleEl.className = "card-title";
+                const safeHref = safeHttpUrl(item.url);
+
+                if (safeHref) {
+                    const link = document.createElement("a");
+                    link.className = "card-link";
+                    link.href = safeHref;
+                    link.target = "_blank";
+                    link.rel = "noopener noreferrer";
+
+                    const span = document.createElement("span");
+                    span.textContent = item.title || "无标题";
+                    link.appendChild(span);
+
+                    link.insertAdjacentHTML(
+                        "beforeend",
+                        '<svg class="ext-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
+                    );
+                    titleEl.appendChild(link);
+                } else {
+                    titleEl.textContent = item.title || "无标题";
+                }
+                article.appendChild(titleEl);
+
+                if (Array.isArray(item.bullets) && item.bullets.length > 0) {
+                    const ul = document.createElement("ul");
+                    ul.className = "bullet-list";
+                    for (const text of item.bullets) {
+                        const li = document.createElement("li");
+                        li.className = "bullet-item";
+                        li.textContent = String(text);
+                        ul.appendChild(li);
+                    }
+                    article.appendChild(ul);
+                }
+
+                return article;
+            }
+
+            function renderTabs(itemsByCat) {
+                tabsEl.innerHTML = "";
+                const cats = orderedCategories(itemsByCat);
+                const total = cats.reduce(
+                    (acc, c) => acc + (Array.isArray(itemsByCat[c]) ? itemsByCat[c].length : 0),
+                    0
+                );
+
+                if (state.activeCategory !== "all" && !cats.includes(state.activeCategory)) {
+                    state.activeCategory = "all";
+                }
+
+                const entries = [
+                    { key: "all", label: "全部", count: total },
+                    ...cats.map((c) => ({
+                        key: c,
+                        label: getCategoryInfo(c).label,
+                        count: Array.isArray(itemsByCat[c]) ? itemsByCat[c].length : 0,
+                    })),
+                ];
+
+                for (const entry of entries) {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = `tab-btn${state.activeCategory === entry.key ? " active" : ""}`;
+                    btn.setAttribute("role", "tab");
+                    btn.setAttribute("aria-selected", String(state.activeCategory === entry.key));
+
+                    const labelSpan = document.createElement("span");
+                    labelSpan.textContent = entry.label;
+                    btn.appendChild(labelSpan);
+
+                    const countSpan = document.createElement("span");
+                    countSpan.className = "tab-count";
+                    countSpan.textContent = String(entry.count);
+                    btn.appendChild(countSpan);
+
+                    btn.addEventListener("click", () => {
+                        if (state.activeCategory === entry.key) return;
+                        state.activeCategory = entry.key;
+                        renderActiveIssue(true);
+                    });
+                    tabsEl.appendChild(btn);
+                }
+            }
+
+            function renderActiveIssue(animate = false) {
+                syncEditionHeader();
+
+                const slot = state.cache[state.issue];
+
+                if (slot.status === "loading" || slot.status === "idle") {
+                    tabsEl.innerHTML = "";
+                    renderLoading();
+                    return;
+                }
+
+                if (slot.status !== "ready" || !slot.data || typeof slot.data.items !== "object" || slot.data.items === null) {
+                    tabsEl.innerHTML = "";
+                    renderStateBox("尚未生成", "当前暂未获取到该期简报，请稍后再试。", true);
+                    if (animate) triggerStageAnimation();
+                    return;
+                }
+
+                const itemsByCat = slot.data.items;
+                const cats = orderedCategories(itemsByCat);
+                const totalCount = countTotalItems(slot.data);
+
+                renderTabs(itemsByCat);
+
+                if (totalCount === 0) {
+                    renderStateBox("尚未生成", "该期简报暂无新闻条目。", true);
+                    if (animate) triggerStageAnimation();
+                    return;
+                }
+
+                const visibleCats = state.activeCategory === "all"
+                    ? cats
+                    : cats.filter((c) => c === state.activeCategory);
+
+                contentEl.innerHTML = "";
+                let renderedCount = 0;
+
+                for (const cat of visibleCats) {
+                    const rawList = Array.isArray(itemsByCat[cat]) ? itemsByCat[cat] : [];
+                    const filtered = rawList.filter((item) => matchesQuery(item, state.query));
+                    if (filtered.length === 0) continue;
+
+                    renderedCount += filtered.length;
+
+                    const section = document.createElement("section");
+                    section.className = "category-section";
+
+                    const secHeader = document.createElement("div");
+                    secHeader.className = "section-header";
+
+                    const secTitle = document.createElement("h2");
+                    secTitle.className = "section-title";
+                    secTitle.textContent = getCategoryInfo(cat).label;
+                    secHeader.appendChild(secTitle);
+
+                    const secLine = document.createElement("span");
+                    secLine.className = "section-line";
+                    secLine.setAttribute("aria-hidden", "true");
+                    secHeader.appendChild(secLine);
+
+                    const secBadge = document.createElement("span");
+                    secBadge.className = "section-badge";
+                    secBadge.textContent = `${filtered.length} 条`;
+                    secHeader.appendChild(secBadge);
+
+                    section.appendChild(secHeader);
+
+                    const listEl = document.createElement("div");
+                    listEl.className = "card-list";
+                    for (const item of filtered) {
+                        listEl.appendChild(createNewsCard(item, cat));
+                    }
+                    section.appendChild(listEl);
+                    contentEl.appendChild(section);
+                }
+
+                if (renderedCount === 0) {
+                    renderStateBox("没有匹配的新闻", "试试更换搜索关键词或切换到其他分类。", false);
+                }
+
+                if (animate) {
+                    triggerStageAnimation();
+                }
+            }
+
+            async function fetchSingleIssue(issue, signal) {
+                try {
+                    const resp = await fetch(ENDPOINTS[issue], {
+                        cache: "no-store",
+                        signal,
+                        headers: { Accept: "application/json" },
+                    });
+                    if (!resp.ok) {
+                        return { status: "unavailable", data: null };
+                    }
+                    const payload = await resp.json();
+                    if (!payload || typeof payload !== "object" || !payload.items || typeof payload.items !== "object") {
+                        return { status: "unavailable", data: null };
+                    }
+                    return { status: "ready", data: payload };
+                } catch (err) {
+                    if (err && err.name === "AbortError") {
+                        return null;
+                    }
+                    return { status: "unavailable", data: null };
+                }
+            }
+
+            async function loadBriefings(forceRefresh = false) {
+                if (state.controller) {
+                    state.controller.abort();
+                    state.controller = null;
+                }
+                refreshBtn.classList.remove("spinning");
+
+                const bothLoaded =
+                    (state.cache.latest.status === "ready" || state.cache.latest.status === "unavailable") &&
+                    (state.cache.previous.status === "ready" || state.cache.previous.status === "unavailable");
+
+                if (!forceRefresh && bothLoaded) {
+                    renderActiveIssue(true);
+                    return;
+                }
+
+                const controller = new AbortController();
+                state.controller = controller;
+
+                state.cache.latest = { status: "loading", data: null };
+                state.cache.previous = { status: "loading", data: null };
+                refreshBtn.classList.add("spinning");
+                renderActiveIssue(false);
+
+                const tasks = ["latest", "previous"].map(async (issue) => {
+                    const result = await fetchSingleIssue(issue, controller.signal);
+                    if (!result || state.controller !== controller) return;
+                    state.cache[issue] = result;
+                    if (state.issue === issue) {
+                        renderActiveIssue(true);
+                    } else {
+                        syncEditionHeader();
+                    }
+                });
+
+                await Promise.allSettled(tasks);
+                if (state.controller === controller) {
+                    state.controller = null;
+                    refreshBtn.classList.remove("spinning");
+                }
+            }
+
+            for (const issue of ["latest", "previous"]) {
+                editionBtns[issue].addEventListener("click", () => {
+                    if (state.issue === issue) return;
+                    state.issue = issue;
+                    renderActiveIssue(true);
+                    if (window.scrollY > 100) {
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                    }
+                });
+            }
+
+            function weatherCodeInfo(code, isDay = 1) {
+                const night = isDay === 0;
+                const map = {
+                    0: { text: "晴", icon: night ? "🌙" : "☀️" },
+                    1: { text: "大部晴朗", icon: night ? "🌙" : "🌤️" },
+                    2: { text: "多云", icon: "⛅" },
+                    3: { text: "阴", icon: "☁️" },
+                    45: { text: "有雾", icon: "🌫️" },
+                    48: { text: "冻雾", icon: "🌫️" },
+                    51: { text: "小毛毛雨", icon: "🌦️" },
+                    53: { text: "毛毛雨", icon: "🌦️" },
+                    55: { text: "浓毛毛雨", icon: "🌧️" },
+                    56: { text: "冻毛毛雨", icon: "🌧️" },
+                    57: { text: "强冻毛毛雨", icon: "🌧️" },
+                    61: { text: "小雨", icon: "🌧️" },
+                    63: { text: "中雨", icon: "🌧️" },
+                    65: { text: "大雨", icon: "🌧️" },
+                    66: { text: "小冻雨", icon: "🌧️" },
+                    67: { text: "大冻雨", icon: "🌧️" },
+                    71: { text: "小雪", icon: "🌨️" },
+                    73: { text: "中雪", icon: "🌨️" },
+                    75: { text: "大雪", icon: "❄️" },
+                    77: { text: "雪粒", icon: "🌨️" },
+                    80: { text: "阵雨", icon: "🌦️" },
+                    81: { text: "中阵雨", icon: "🌧️" },
+                    82: { text: "强阵雨", icon: "⛈️" },
+                    85: { text: "小阵雪", icon: "🌨️" },
+                    86: { text: "强阵雪", icon: "❄️" },
+                    95: { text: "雷阵雨", icon: "⛈️" },
+                    96: { text: "雷暴冰雹", icon: "⛈️" },
+                    99: { text: "强雷暴冰雹", icon: "⛈️" },
+                };
+                return map[code] || { text: "未知", icon: "🌡️" };
+            }
+
+            function buildWeatherItem(cityName, entry) {
+                const cur = entry && entry.current ? entry.current : null;
+                const daily = entry && entry.daily ? entry.daily : null;
+                if (!cur || typeof cur.temperature_2m !== "number") return null;
+
+                const info = weatherCodeInfo(cur.weather_code, cur.is_day);
+                const item = document.createElement("span");
+                item.className = "weather-item";
+
+                const iconSpan = document.createElement("span");
+                iconSpan.textContent = info.icon;
+                item.appendChild(iconSpan);
+
+                const citySpan = document.createElement("span");
+                citySpan.className = "weather-city";
+                citySpan.textContent = cityName;
+                item.appendChild(citySpan);
+
+                const condSpan = document.createElement("span");
+                condSpan.textContent = info.text;
+                item.appendChild(condSpan);
+
+                const tempSpan = document.createElement("span");
+                tempSpan.className = "weather-temp";
+                tempSpan.textContent = `${cur.temperature_2m.toFixed(1)}°C`;
+                item.appendChild(tempSpan);
+
+                const parts = [];
+                if (
+                    daily &&
+                    Array.isArray(daily.temperature_2m_min) &&
+                    Array.isArray(daily.temperature_2m_max) &&
+                    typeof daily.temperature_2m_min[0] === "number" &&
+                    typeof daily.temperature_2m_max[0] === "number"
+                ) {
+                    parts.push(`今日 ${Math.round(daily.temperature_2m_min[0])}~${Math.round(daily.temperature_2m_max[0])}°C`);
+                }
+                if (
+                    daily &&
+                    Array.isArray(daily.temperature_2m_min) &&
+                    Array.isArray(daily.temperature_2m_max) &&
+                    typeof daily.temperature_2m_min[1] === "number" &&
+                    typeof daily.temperature_2m_max[1] === "number"
+                ) {
+                    const tmrwInfo = Array.isArray(daily.weather_code)
+                        ? weatherCodeInfo(daily.weather_code[1], 1)
+                        : null;
+                    const tmrwCond = tmrwInfo ? `${tmrwInfo.text} ` : "";
+                    parts.push(`明日 ${tmrwCond}${Math.round(daily.temperature_2m_min[1])}~${Math.round(daily.temperature_2m_max[1])}°C`);
+                }
+                if (typeof cur.relative_humidity_2m === "number") {
+                    parts.push(`湿度 ${Math.round(cur.relative_humidity_2m)}%`);
+                }
+                if (typeof cur.wind_speed_10m === "number") {
+                    parts.push(`风速 ${Math.round(cur.wind_speed_10m)}km/h`);
+                }
+
+                if (parts.length > 0) {
+                    const detailSpan = document.createElement("span");
+                    detailSpan.textContent = `· ${parts.join(" · ")}`;
+                    item.appendChild(detailSpan);
+                }
+
+                return item;
+            }
+
+            function renderWeatherStatic(message, withRetry) {
+                weatherViewportEl.innerHTML = "";
+                const span = document.createElement("span");
+                span.className = "weather-static";
+                span.textContent = message;
+
+                if (withRetry) {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "weather-retry";
+                    btn.textContent = "重试";
+                    btn.addEventListener("click", () => loadWeather());
+                    span.appendChild(btn);
+                }
+                weatherViewportEl.appendChild(span);
+            }
+
+            let weatherReqSeq = 0;
+
+            async function loadWeather() {
+                const reqId = ++weatherReqSeq;
+                try {
+                    const resp = await fetch(WEATHER_ENDPOINT, { cache: "no-store" });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    const raw = await resp.json();
+                    if (reqId !== weatherReqSeq) return;
+
+                    const list = Array.isArray(raw) ? raw : [raw];
+                    const items = WEATHER_CITIES
+                        .map((city, idx) => buildWeatherItem(city.name, list[idx]))
+                        .filter(Boolean);
+
+                    if (items.length === 0) {
+                        renderWeatherStatic("暂未获取到天气数据", true);
+                        return;
+                    }
+
+                    const track = document.createElement("div");
+                    track.className = "weather-track";
+
+                    for (let copy = 0; copy < 2; copy++) {
+                        const group = document.createElement("div");
+                        group.className = "weather-group";
+                        if (copy === 1) {
+                            group.setAttribute("aria-hidden", "true");
+                        }
+                        items.forEach((node) => {
+                            group.appendChild(copy === 0 ? node : node.cloneNode(true));
+                            const sep = document.createElement("span");
+                            sep.className = "weather-sep";
+                            sep.textContent = "|";
+                            group.appendChild(sep);
+                        });
+                        track.appendChild(group);
+                    }
+
+                    weatherViewportEl.innerHTML = "";
+                    weatherViewportEl.appendChild(track);
+                } catch {
+                    if (reqId !== weatherReqSeq) return;
+                    renderWeatherStatic("暂未获取到天气数据", true);
+                }
+            }
+
+            refreshBtn.addEventListener("click", () => {
+                loadBriefings(true);
+                loadWeather();
+            });
+
+            themeBtn.addEventListener("click", () => {
+                const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+                applyTheme(current === "dark" ? "light" : "dark");
+            });
+
+            searchInputEl.addEventListener("input", () => {
+                state.query = searchInputEl.value.trim();
+                clearSearchBtn.classList.toggle("visible", state.query.length > 0);
+                renderActiveIssue(false);
+            });
+
+            clearSearchBtn.addEventListener("click", () => {
+                searchInputEl.value = "";
+                state.query = "";
+                clearSearchBtn.classList.remove("visible");
+                searchInputEl.focus();
+                renderActiveIssue(false);
+            });
+
+            window.addEventListener("scroll", () => {
+                backTopBtn.classList.toggle("visible", window.scrollY > 360);
+            }, { passive: true });
+
+            backTopBtn.addEventListener("click", () => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            });
+
+            initTheme();
+            loadBriefings(true);
+            loadWeather();
+            setInterval(loadWeather, 15 * 60 * 1000);
+        })();
+    </script>
+</body>
+</html>
