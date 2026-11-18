@@ -704,20 +704,30 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
         category: "international",
         sourceName: "Google News",
     },
-    bbc_sport: {
-        url: "https://feeds.bbci.co.uk/sport/rss.xml",
+    // Dedicated sport-specific RSS feeds (avoiding general multi-sport feeds with unrelated sports):
+    // Football RSS from BBC Sport
+    bbc_football: {
+        url: "https://feeds.bbci.co.uk/sport/football/rss.xml",
         category: "sports",
         sourceName: "BBC Sport",
     },
-    guardian_sport: {
-        url: "https://www.theguardian.com/uk/sport/rss",
+    // Football RSS from The Guardian
+    guardian_football: {
+        url: "https://www.theguardian.com/football/rss",
         category: "sports",
         sourceName: "The Guardian",
     },
-    gn_sports: {
-        url: "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=en-US&gl=US&ceid=US:en",
+    // Formula 1 RSS from BBC Sport
+    bbc_f1: {
+        url: "https://feeds.bbci.co.uk/sport/formula1/rss.xml",
         category: "sports",
-        sourceName: "Google News",
+        sourceName: "BBC Sport",
+    },
+    // Baseball (MLB) official news RSS
+    mlb_news: {
+        url: "https://www.mlb.com/feeds/news/rss.xml",
+        category: "sports",
+        sourceName: "MLB.com",
     },
     gn_realmadrid: {
         url: "https://news.google.com/rss/search?q=%22Real+Madrid%22+when:2d&hl=en-US&gl=US&ceid=US:en",
@@ -870,19 +880,24 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("gn_chinanews", opts),
     ],
     sports: [
-        (opts) => fetchRssFeed("bbc_sport", opts),
-        (opts) => fetchRssFeed("guardian_sport", opts),
-        (opts) => fetchRssFeed("gn_sports", opts),
+        // Football
+        (opts) => fetchRssFeed("bbc_football", opts),
+        (opts) => fetchRssFeed("guardian_football", opts),
         (opts) => fetchRssFeed("gn_football", opts),
         fetchMarca,
         (opts) => fetchRssFeed("managing_madrid", opts),
         (opts) => fetchRssFeed("football_espana", opts),
         (opts) => fetchRssFeed("gn_realmadrid", opts),
+        // Formula 1
         fetchF1,
+        (opts) => fetchRssFeed("bbc_f1", opts),
         (opts) => fetchRssFeed("racefans", opts),
         (opts) => fetchRssFeed("motorsport", opts),
         (opts) => fetchRssFeed("gn_f1", opts),
+        // Baseball
+        (opts) => fetchRssFeed("mlb_news", opts),
         (opts) => fetchRssFeed("gn_mlb", opts),
+        // Table Tennis
         (opts) => fetchRssFeed("gn_wtt", opts),
         (opts) => fetchRssFeed("gn_ttcn", opts),
     ],

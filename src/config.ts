@@ -6,6 +6,7 @@ import { FetchOptionsSchema } from "./operators/fetchNews.operator.js";
 import { FilterRecencyOptionsSchema } from "./operators/filterRecency.operator.js";
 import { HistoryNewsOptionsSchema } from "./operators/historyNews.operator.js";
 import { PruneNewsOptionsSchema } from "./operators/pruneNews.operator.js";
+import { RankNewsOptionsSchema } from "./operators/rankNews.operator.js";
 import { ReadOptionsSchema } from "./operators/readNews.operator.js";
 import { SummarizeNewsOptionsSchema } from "./operators/summarizeNews.operator.js";
 import { AIClientConfigSchema } from "./utils/ai.js";
@@ -86,6 +87,7 @@ export const ConfigSchema = DbConfigSchema
     .and(FilterRecencyOptionsSchema.omit({ debug: true }))
     .and(SummarizeNewsOptionsSchema.omit({ debug: true }))
     .and(ExportNewsOptionsSchema.omit({ debug: true }))
+    .and(RankNewsOptionsSchema.omit({ debug: true }))
     .and(SelectStageConfigSchema)
     .and(CronConfigSchema)
     .and(DagConfigSchema);

@@ -8,8 +8,61 @@ const RankResponseSchema = z.object({
     ranked_ids: z.array(z.string()),
 });
 
+/**
+ * Creates a Zod schema that normalizes optional list configuration values (`rank_keywords`, `rank_sports`)
+ * into trimmed, deduplicated non-empty string arrays (defaulting to `[]`).
+ * Accepts empty strings, JSON array strings (`[...]`), comma-separated strings (`,` or `，`),
+ * as well as already-parsed `string[]` arrays when re-validated downstream by LightDag.
+ */
+function createStringListSchema(fieldName: string) {
+    return z
+        .union([
+            z.string().transform((val, ctx) => {
+                const trimmed = val.trim();
+                if (!trimmed) {
+                    return [];
+                }
+                // Support JSON array notation (e.g. '["China", "AI"]') in `.env` files
+                if (trimmed.startsWith("[")) {
+                    try {
+                        const parsed: unknown = JSON.parse(trimmed);
+                        if (Array.isArray(parsed)) {
+                            return parsed;
+                        }
+                    } catch {
+                        ctx.addIssue({
+                            code: "custom",
+                            message: `Invalid JSON array for ${fieldName}: ${val}`,
+                        });
+                        return z.NEVER;
+                    }
+                }
+                // Otherwise split on ASCII or full-width Chinese commas
+                return trimmed.split(/[,，]/);
+            }),
+            // Allow array inputs directly so LightDag re-validation accepts parsed Config arrays
+            z.array(z.string()),
+        ])
+        .pipe(
+            z.array(z.string().transform((s) => s.trim())).transform((items) =>
+                Array.from(new Set(items.filter(Boolean))),
+            ),
+        )
+        .default([]);
+}
+
+/** Comma-separated, JSON-array, or array schema for optional ranking keywords. */
+export const RankKeywordsSchema = createStringListSchema("rank_keywords");
+
+/** Comma-separated, JSON-array, or array schema for optional target sports within the `sports` category. */
+export const RankSportsSchema = createStringListSchema("rank_sports");
+
 /** Runtime configuration options accepted by the rank news operator. */
 export const RankNewsOptionsSchema = z.object({
+    /** Optional list of preferred interest keywords given a mild importance boost during ranking. */
+    rank_keywords: RankKeywordsSchema,
+    /** Optional list of target sports to retain and balance when ranking the `sports` category. */
+    rank_sports: RankSportsSchema,
     /** Whether to log per-category filtering and remaining item counts after ranking. */
     debug: z.boolean().default(false),
 });
@@ -41,7 +94,33 @@ const RankNewsRequiresSchema = z.object({
 });
 type RankNewsRequires = z.infer<typeof RankNewsRequiresSchema>;
 
-function buildRankInstruction(hasHistory: boolean): string {
+/**
+ * Builds the system instruction for quality filtering, deduplication, and multi-criteria ranking.
+ *
+ * @param hasHistory Whether historical `covered` items are supplied for cross-history deduplication and novelty scoring
+ * @param category Target news category being ranked
+ * @param rankKeywords Optional user interest keywords applied as a mild secondary relevance boost
+ * @param rankSports Optional list of target sports used to scope and balance the `sports` category
+ */
+function buildRankInstruction(
+    hasHistory: boolean,
+    category: NewsCategory,
+    rankKeywords: string[] = [],
+    rankSports: string[] = [],
+): string {
+    // Only apply sport-scoping and cross-sport balancing when ranking `sports` with explicit `rank_sports`
+    const hasTargetSports = category === "sports" && rankSports.length > 0;
+    const hasKeywords = rankKeywords.length > 0;
+    const sportsList = rankSports.join(", ");
+    // Hard filter in Step 1 drops non-target sports when `rank_sports` is configured
+    const sportsScopeRule = hasTargetSports
+        ? `\n- **Sports Scope Rule**: Keep ONLY articles covering the configured \`target_sports\` (**${sportsList}**; matching literal terms, leagues, or cross-language equivalents). Immediately OMIT any article primarily covering other sports outside \`target_sports\`.`
+        : "";
+    // Diversity nudge in Step 3 prevents one popular sport or club from crowding out others
+    const sportsDiversityNote = hasTargetSports
+        ? ` For the \`sports\` category, balance and interleave top-ranked items across the configured \`target_sports\` (${sportsList}) whenever substantive stories exist across them, rather than letting a single sport or club monopolize the top positions.`
+        : "";
+
     const historyDedupeSection = hasHistory
         ? `2. **Cross-History Deduplication against \`covered\`**:
    - Exclude any candidate reporting the **same underlying news event** as any article in \`covered\`.
@@ -49,9 +128,21 @@ function buildRankInstruction(hasHistory: boolean): string {
         : `2. **No Historical Context**:
    - \`has_history\` is \`false\` and no historical articles are provided. Do NOT perform cross-history deduplication or speculate about previously covered briefings.`;
 
-    const historyNoveltyCriterion = hasHistory
-        ? `5. **Historical Novelty & Differentiation**: Among distinct non-duplicate events, rank genuinely fresh stories, new subjects, and unrepresented developments higher than repetitive follow-ups or themes heavily saturated in \`covered\`, so consecutive briefings deliver fresh variety rather than similar stories every issue.`
-        : "";
+    // Collect optional Step 3 criteria so indices (`5.`, `6.`) stay contiguous when either or both are active
+    const step3ExtraCriteria: string[] = [];
+    if (hasHistory) {
+        step3ExtraCriteria.push(
+            `**Historical Novelty & Differentiation**: Among distinct non-duplicate events, rank genuinely fresh stories, new subjects, and unrepresented developments higher than repetitive follow-ups or themes heavily saturated in \`covered\`, so consecutive briefings deliver fresh variety rather than similar stories every issue.`,
+        );
+    }
+    if (hasKeywords) {
+        step3ExtraCriteria.push(
+            `**Preferred Keyword Boost (Mild Nudge Only — Do NOT Over-Prioritize)**: Treat \`preferred_keywords\` as a **mild secondary relevance boost** (matching literal terms or clear cross-language equivalents, e.g. \`"China"\` ↔ \`"中国"\`). When candidates have comparable importance, authority, and timeliness, place keyword-matching articles modestly higher. Strict guardrails:\n   - Never elevate minor or routine keyword-matching items above major, high-impact non-keyword breaking news.\n   - Keyword matches must still pass Step 1 quality filtering and Step 2 deduplication.\n   - Preserve topic diversity by interleaving non-keyword stories rather than letting keyword matches monopolize the top positions.`,
+        );
+    }
+    const extraCriteriaText = step3ExtraCriteria
+        .map((criterion, idx) => `${5 + idx}. ${criterion}`)
+        .join("\n");
 
     return `You are a world-class senior news editor, quality filter, deduplication engine, and ranking engine for an executive news briefing.
 
@@ -59,7 +150,7 @@ You will receive a JSON object containing:
 - \`category\`: News category name.
 - \`current_time\`: Current UTC ISO-8601 timestamp for evaluating timeliness.
 - \`has_history\`: Boolean indicating whether historical briefing articles (\`covered\`) are present.
-- \`candidates\`: Candidate \`BriefNews\` articles to filter, deduplicate, and rank. Each item includes \`hash_id\`, \`title\`, \`url\`, \`source_name\`, \`source_date\` (may be a default fallback such as \`1970-01-01\` / epoch 0 at the fetch stage), \`category\`, and optionally \`bullets\` (post-summarization points; absent at the fetch stage).
+${hasTargetSports ? "- `target_sports`: Configured list of target sports to retain and balance within the `sports` category.\n" : ""}${hasKeywords ? "- `preferred_keywords`: Optional list of user interest keywords to apply a mild importance boost without over-prioritizing.\n" : ""}- \`candidates\`: Candidate \`BriefNews\` articles to filter, deduplicate, and rank. Each item includes \`hash_id\`, \`title\`, \`url\`, \`source_name\`, \`source_date\` (may be a default fallback such as \`1970-01-01\` / epoch 0 at the fetch stage), \`category\`, and optionally \`bullets\` (post-summarization points; absent at the fetch stage).
 ${hasHistory ? "- `covered`: Historical `BriefNews` articles already published in previous briefings (for historical deduplication and topic differentiation).\n" : ""}
 Execute the following pipeline strictly in order:
 
@@ -68,7 +159,7 @@ OMIT from your output any candidate that falls into these categories:
 - Advertisements, sponsored content, advertorials, product promos, shopping deals/coupons, betting promos, or commercial PR fluff.
 - Non-substantive items: clickbait teasers with no factual information, vague placeholders, navigation/cookie/login boilerplate, error pages, garbled scrapes, or media-only pages lacking reportable news.
 - Trivial filler, pure rumors, or extremely low-value content unfit for a serious news briefing.
-- **Stage Compatibility Rule**: Candidates from the fetch stage carry only metadata (\`title\`, \`url\`, \`source_name\`, \`source_date\`, \`category\`) without \`bullets\`. Do NOT reject a legitimate news headline merely because \`bullets\` is missing — judge its substance, newsworthiness, and ad likelihood from headline specificity, URL cues, and \`source_name\`. When \`bullets\` IS present and non-empty, inspect it carefully to catch thin clickbait or shallow filler.
+- **Stage Compatibility Rule**: Candidates from the fetch stage carry only metadata (\`title\`, \`url\`, \`source_name\`, \`source_date\`, \`category\`) without \`bullets\`. Do NOT reject a legitimate news headline merely because \`bullets\` is missing — judge its substance, newsworthiness, and ad likelihood from headline specificity, URL cues, and \`source_name\`. When \`bullets\` IS present and non-empty, inspect it carefully to catch thin clickbait or shallow filler.${sportsScopeRule}
 
 ### Step 2: Deduplication
 1. **Intra-Batch Deduplication (Always Apply)**:
@@ -81,9 +172,8 @@ Sort ALL remaining kept candidates from highest priority (index 0) to lowest pri
 1. **News Importance**: Real-world impact, significance, policy/market/industry/competitive stakes, or major breakthroughs within the category.
 2. **Media Authority**: Credibility, primary-source standing, and editorial rigor of \`source_name\` (e.g., tier-1 wire services, flagship newspapers, official league/institutional outlets, and leading domain publications outrank aggregators, repost blogs, and tabloids).
 3. **Timeliness**: Compare valid \`source_date\` against \`current_time\`. Breaking and recent news outranks older reports. If \`source_date\` is a fallback timestamp (such as \`1970-01-01\` / epoch 0), ignore it for time comparison — infer recency cues from the text if any, otherwise weight the other criteria normally.
-4. **Topic Diversity**: Avoid clustering near-identical sub-topics, the same team/company/person/country, or tightly related narratives consecutively at the top of the list. Interleave distinct themes and angles so top-ranked items provide broad, balanced coverage across the category.
-${historyNoveltyCriterion}
-
+4. **Topic Diversity**: Avoid clustering near-identical sub-topics, the same team/company/person/country, or tightly related narratives consecutively at the top of the list. Interleave distinct themes and angles so top-ranked items provide broad, balanced coverage across the category.${sportsDiversityNote}
+${extraCriteriaText ? `${extraCriteriaText}\n` : ""}
 ### Output Format
 Return a JSON object matching \`{"ranked_ids": ["..."]}\`:
 - Include ONLY exact \`hash_id\` strings copied verbatim from \`candidates\` for items that passed Step 1 and Step 2, ordered from highest rank to lowest rank.
@@ -100,6 +190,8 @@ async function rankCategoryItems(
     category: NewsCategory,
     items: Map<string, BriefNews>,
     historyItems: Map<string, BriefNews> | undefined,
+    rankKeywords: string[],
+    rankSports: string[],
     aiClient: AIClient,
     signal?: AbortSignal,
 ): Promise<Map<string, BriefNews>> {
@@ -121,18 +213,23 @@ async function rankCategoryItems(
     // Omit `raw` when serializing to AI so long article bodies are sent only during summarization,
     // while keeping the full BriefNews objects intact in `items` for downstream `read_news` / `save_news`.
     const withoutRaw = ({ raw: _raw, ...rest }: BriefNews): Omit<BriefNews, "raw"> => rest;
+    // Inject `target_sports` only when ranking `sports` and `preferred_keywords` only when configured
+    // so non-matching stages and unconfigured runs incur zero extra prompt/payload tokens.
+    const hasTargetSports = category === "sports" && rankSports.length > 0;
 
     const payload = {
         category,
         current_time: new Date().toISOString(),
         has_history: hasHistory,
+        ...(hasTargetSports ? { target_sports: rankSports } : {}),
+        ...(rankKeywords.length > 0 ? { preferred_keywords: rankKeywords } : {}),
         candidates: Array.from(items.values(), withoutRaw),
         ...(hasHistory ? { covered: Array.from(historyItems!.values(), withoutRaw) } : {}),
     };
 
     const response = await aiClient.ask(
         JSON.stringify(payload),
-        buildRankInstruction(hasHistory),
+        buildRankInstruction(hasHistory, category, rankKeywords, rankSports),
         RankResponseSchema,
         signal,
     );
@@ -173,9 +270,18 @@ export default async function rankNews({ inputs, requires, options, signal }: Op
         : 0;
 
     const categories: NewsCategory[] = [...rank_input_items.keys()];
+    // Forward configured `rank_keywords` and `rank_sports` preferences to every category task
     const results = await Promise.allSettled(
         categories.map((category) =>
-            rankCategoryItems(category, rank_input_items.get(category)!, history_items?.get(category), ai_client, signal),
+            rankCategoryItems(
+                category,
+                rank_input_items.get(category)!,
+                history_items?.get(category),
+                rank_options.rank_keywords,
+                rank_options.rank_sports,
+                ai_client,
+                signal,
+            ),
         ),
     );
     signal?.throwIfAborted();

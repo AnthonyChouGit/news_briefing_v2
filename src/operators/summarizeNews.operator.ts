@@ -39,6 +39,10 @@ const SummarizeNewsRequiresSchema = z.object({
 });
 type SummarizeNewsRequires = z.infer<typeof SummarizeNewsRequiresSchema>;
 
+/**
+ * Builds the system instruction guiding the AI summarizer's content quality filtering,
+ * bullet length/count targets, and JSON formatting rules for the configured output language.
+ */
 function getSummarizeInstruction(options: SummarizeNewsOptions): string {
     const {
         language,
@@ -60,7 +64,7 @@ Before summarizing, evaluate each article's "raw" field. EXCLUDE any article whe
 - The raw text consists only of website boilerplate, navigation elements, cookie notices, login prompts, or error/retry messages.
 - The raw text is a video/media page placeholder with no transcript or written reporting (e.g. "No results found", "Try again later").
 - The raw text is too short (fewer than ~50 words of actual article content) to produce a meaningful summary.
-Do NOT include excluded articles in your response at all — simply omit them from the "items" array.
+Do NOT include excluded articles in your response at all — decide whether an article passes BEFORE emitting its JSON object, and simply omit excluded articles from the "items" array. NEVER emit a placeholder or stub entry with an empty "title" (""), empty "bullets" ([]), or fewer than ${summarize_min_bullets} bullets.
 
 For every REMAINING article that passes the content quality filter, produce a high-quality, comprehensive, and journalistic summary. Return a JSON object with an "items" array containing one entry per included article, preserving their original relative order. Each entry must have:
 
@@ -104,15 +108,20 @@ async function summarizeCategoryEvents(
         return;
     }
 
+    // Anthropic's constrained decoder strips `minLength` / `minItems` (> 1) during schema sanitization,
+    // so enforcing non-empty / min-bullet bounds in `Output.object` causes one malformed stub entry
+    // (e.g., `{"hash_id":"...","title":"","bullets":[]}`) emitted mid-stream to reject the entire batch.
+    // Keep the wire schema structural with `.describe()` hints here and validate strictly per item below.
     const resSchema = z.object({
         items: z.array(
             z.object({
-                hash_id: z.string().nonempty(),
-                title: z.string().nonempty(),
+                hash_id: z.string().describe("Exact non-empty hash_id of the article."),
+                title: z.string().describe("Non-empty plain-text headline in the target language."),
                 bullets: z
-                    .array(z.string().nonempty())
-                    .min(options.summarize_min_bullets)
-                    .max(options.summarize_max_bullets),
+                    .array(z.string().describe("Non-empty summary bullet sentence."))
+                    .describe(
+                        `Array of ${options.summarize_min_bullets} to ${options.summarize_max_bullets} non-empty summary bullets.`,
+                    ),
             }),
         ),
     });
@@ -124,22 +133,41 @@ async function summarizeCategoryEvents(
         signal,
     );
 
-    const resMap = new Map<string, (typeof resData.items)[number]>();
+    // Normalize and strictly validate each article entry individually so valid articles in the batch survive
+    const resMap = new Map<string, { title: string; bullets: string[] }>();
     for (const summarized of resData.items) {
-        if (!resMap.has(summarized.hash_id)) {
-            resMap.set(summarized.hash_id, summarized);
+        const hashId = summarized.hash_id.trim();
+        const title = summarized.title.trim();
+        // Strip empty/whitespace bullets and enforce the configured upper bound
+        const bullets = summarized.bullets
+            .map((b) => b.trim())
+            .filter(Boolean)
+            .slice(0, options.summarize_max_bullets);
+
+        // Drop empty placeholders or under-summarized items without failing valid siblings
+        if (!hashId || !title || bullets.length < options.summarize_min_bullets) {
+            continue;
+        }
+        // Keep only the first occurrence if the model repeats the same hash_id
+        if (!resMap.has(hashId)) {
+            resMap.set(hashId, { title, bullets });
         }
     }
 
-    // Single pass over `items`: update kept items in place (preserving original order) and delete excluded ones
+    // Single pass over `items`: update kept items in place (preserving original order) and delete excluded/invalid ones
     for (const [hash_id, targetItem] of items.entries()) {
         const summarized = resMap.get(hash_id);
         if (!summarized) {
             items.delete(hash_id);
             continue;
         }
-        targetItem.title = summarized.title.trim();
-        targetItem.bullets = summarized.bullets.map((b) => b.trim());
+        targetItem.title = summarized.title;
+        targetItem.bullets = summarized.bullets;
+    }
+
+    // Fail explicitly if every article was omitted or invalid, preventing silent empty category results
+    if (items.size === 0) {
+        throw new Error("AI summarization returned zero valid articles.");
     }
 }
 
