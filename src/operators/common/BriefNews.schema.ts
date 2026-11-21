@@ -2,7 +2,7 @@ import * as z from "zod";
 
 export const NewsCategorySchema = z.enum([
     "international",
-    "domestic",
+    "china",
     "ai",
     "sports",
 ]);

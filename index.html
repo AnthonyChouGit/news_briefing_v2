@@ -24,8 +24,8 @@
             --ok: #10b981;
             --cat-international-bg: #eef2ff;
             --cat-international-fg: #3730a3;
-            --cat-domestic-bg: #ecfdf5;
-            --cat-domestic-fg: #047857;
+            --cat-china-bg: #ecfdf5;
+            --cat-china-fg: #047857;
             --cat-ai-bg: #f5f3ff;
             --cat-ai-fg: #6d28d9;
             --cat-sports-bg: #fff7ed;
@@ -54,8 +54,8 @@
             --ok: #34d399;
             --cat-international-bg: rgba(99, 102, 241, 0.16);
             --cat-international-fg: #a5b4fc;
-            --cat-domestic-bg: rgba(16, 185, 129, 0.16);
-            --cat-domestic-fg: #6ee7b7;
+            --cat-china-bg: rgba(16, 185, 129, 0.16);
+            --cat-china-fg: #6ee7b7;
             --cat-ai-bg: rgba(139, 92, 246, 0.16);
             --cat-ai-fg: #c4b5fd;
             --cat-sports-bg: rgba(249, 115, 22, 0.16);
@@ -609,7 +609,7 @@
         }
 
         .cat-international { background: var(--cat-international-bg); color: var(--cat-international-fg); }
-        .cat-domestic      { background: var(--cat-domestic-bg);      color: var(--cat-domestic-fg); }
+        .cat-china         { background: var(--cat-china-bg);         color: var(--cat-china-fg); }
         .cat-ai            { background: var(--cat-ai-bg);            color: var(--cat-ai-fg); }
         .cat-sports        { background: var(--cat-sports-bg);        color: var(--cat-sports-fg); }
         .cat-default       { background: var(--surface-muted);        color: var(--text-secondary); }
@@ -898,7 +898,10 @@
                 { name: "深圳", lat: 22.5431, lon: 114.0579 },
                 { name: "成都", lat: 30.5728, lon: 104.0668 },
             ];
-            const WEATHER_ENDPOINT =
+            // Primary mainland-China ESA-backed CORS API (no key required)
+            const UAPIS_WEATHER_BASE = "https://uapis.cn/api/v1/misc/weather";
+            // Overseas fallback API used when the primary domestic source times out or fails
+            const OPEN_METEO_ENDPOINT =
                 `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_CITIES.map((c) => c.lat).join(",")}` +
                 `&longitude=${WEATHER_CITIES.map((c) => c.lon).join(",")}` +
                 "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day" +
@@ -906,12 +909,14 @@
 
             const CATEGORY_META = {
                 international: { label: "国际", cls: "cat-international" },
-                domestic: { label: "国内", cls: "cat-domestic" },
+                china: { label: "中国", cls: "cat-china" },
+                // Backward-compatible alias for archived editions exported before `domestic` was renamed
+                domestic: { label: "中国", cls: "cat-china" },
                 ai: { label: "AI 科技", cls: "cat-ai" },
                 sports: { label: "体育", cls: "cat-sports" },
             };
 
-            const CATEGORY_ORDER = ["international", "domestic", "ai", "sports"];
+            const CATEGORY_ORDER = ["international", "china", "domestic", "ai", "sports"];
 
             const state = {
                 issue: "latest",
@@ -1426,6 +1431,20 @@
                 });
             }
 
+            /** Wraps fetch with an AbortController timeout so slow or blocked hosts fail fast. */
+            async function fetchJsonWithTimeout(url, timeoutMs) {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                try {
+                    const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    return await resp.json();
+                } finally {
+                    clearTimeout(timer);
+                }
+            }
+
+            /** Maps Open-Meteo WMO weather codes to Chinese labels and icons. */
             function weatherCodeInfo(code, isDay = 1) {
                 const night = isDay === 0;
                 const map = {
@@ -1461,61 +1480,115 @@
                 return map[code] || { text: "未知", icon: "🌡️" };
             }
 
-            function buildWeatherItem(cityName, entry) {
+            /** Maps Chinese condition text returned by domestic APIs (e.g. uapis.cn) to weather icons. */
+            function weatherTextIcon(text) {
+                const cond = String(text || "");
+                if (!cond) return "🌡️";
+                if (cond.includes("雷")) return "⛈️";
+                if (cond.includes("雪")) return cond.includes("暴") ? "❄️" : "🌨️";
+                if (cond.includes("暴雨") || cond.includes("大雨") || cond.includes("中雨") || cond.includes("小雨") || cond.includes("雨")) {
+                    return cond.includes("阵雨") || cond.includes("毛") ? "🌦️" : "🌧️";
+                }
+                if (cond.includes("雾") || cond.includes("霾") || cond.includes("沙") || cond.includes("尘")) return "🌫️";
+                if (cond.includes("阴")) return "☁️";
+                if (cond.includes("多云")) return "⛅";
+                if (cond.includes("晴")) {
+                    const bjHour = (new Date().getUTCHours() + 8) % 24;
+                    return bjHour >= 6 && bjHour < 19 ? "☀️" : "🌙";
+                }
+                return "🌡️";
+            }
+
+            /** Normalizes a uapis.cn city weather response into the shared display record format. */
+            function normalizeUapisEntry(cityName, data) {
+                if (!data || typeof data.temperature !== "number") return null;
+                const today = Array.isArray(data.forecast) ? data.forecast[0] : null;
+                const tomorrow = Array.isArray(data.forecast) ? data.forecast[1] : null;
+                const todayMin = typeof today?.temp_min === "number" ? today.temp_min : data.temp_min;
+                const todayMax = typeof today?.temp_max === "number" ? today.temp_max : data.temp_max;
+                const condText = data.weather || "未知";
+                const windDir = typeof data.wind_direction === "string" ? data.wind_direction.trim() : "";
+                const rawPower = typeof data.wind_power === "string" ? data.wind_power.trim() : "";
+                const windPower = rawPower ? (/级$/.test(rawPower) ? rawPower : `${rawPower}级`) : "";
+
+                return {
+                    cityName,
+                    icon: weatherTextIcon(condText),
+                    conditionText: condText,
+                    tempText: `${Number(data.temperature).toFixed(1).replace(/\.0$/, "")}°C`,
+                    todayMin: typeof todayMin === "number" ? Math.round(todayMin) : null,
+                    todayMax: typeof todayMax === "number" ? Math.round(todayMax) : null,
+                    tomorrowCond: tomorrow?.weather_day || "",
+                    tomorrowMin: typeof tomorrow?.temp_min === "number" ? Math.round(tomorrow.temp_min) : null,
+                    tomorrowMax: typeof tomorrow?.temp_max === "number" ? Math.round(tomorrow.temp_max) : null,
+                    humidity: typeof data.humidity === "number" ? Math.round(data.humidity) : null,
+                    windText: [windDir, windPower].filter(Boolean).join(" "),
+                };
+            }
+
+            /** Normalizes an Open-Meteo city entry into the shared display record format. */
+            function normalizeOpenMeteoEntry(cityName, entry) {
                 const cur = entry && entry.current ? entry.current : null;
                 const daily = entry && entry.daily ? entry.daily : null;
                 if (!cur || typeof cur.temperature_2m !== "number") return null;
 
                 const info = weatherCodeInfo(cur.weather_code, cur.is_day);
+                const tmrwInfo = daily && Array.isArray(daily.weather_code)
+                    ? weatherCodeInfo(daily.weather_code[1], 1)
+                    : null;
+
+                return {
+                    cityName,
+                    icon: info.icon,
+                    conditionText: info.text,
+                    tempText: `${cur.temperature_2m.toFixed(1)}°C`,
+                    todayMin: typeof daily?.temperature_2m_min?.[0] === "number" ? Math.round(daily.temperature_2m_min[0]) : null,
+                    todayMax: typeof daily?.temperature_2m_max?.[0] === "number" ? Math.round(daily.temperature_2m_max[0]) : null,
+                    tomorrowCond: tmrwInfo ? tmrwInfo.text : "",
+                    tomorrowMin: typeof daily?.temperature_2m_min?.[1] === "number" ? Math.round(daily.temperature_2m_min[1]) : null,
+                    tomorrowMax: typeof daily?.temperature_2m_max?.[1] === "number" ? Math.round(daily.temperature_2m_max[1]) : null,
+                    humidity: typeof cur.relative_humidity_2m === "number" ? Math.round(cur.relative_humidity_2m) : null,
+                    windText: typeof cur.wind_speed_10m === "number" ? `风速 ${Math.round(cur.wind_speed_10m)}km/h` : "",
+                };
+            }
+
+            /** Renders a normalized weather record into a single marquee city element. */
+            function buildWeatherItem(record) {
+                if (!record) return null;
                 const item = document.createElement("span");
                 item.className = "weather-item";
 
                 const iconSpan = document.createElement("span");
-                iconSpan.textContent = info.icon;
+                iconSpan.textContent = record.icon;
                 item.appendChild(iconSpan);
 
                 const citySpan = document.createElement("span");
                 citySpan.className = "weather-city";
-                citySpan.textContent = cityName;
+                citySpan.textContent = record.cityName;
                 item.appendChild(citySpan);
 
                 const condSpan = document.createElement("span");
-                condSpan.textContent = info.text;
+                condSpan.textContent = record.conditionText;
                 item.appendChild(condSpan);
 
                 const tempSpan = document.createElement("span");
                 tempSpan.className = "weather-temp";
-                tempSpan.textContent = `${cur.temperature_2m.toFixed(1)}°C`;
+                tempSpan.textContent = record.tempText;
                 item.appendChild(tempSpan);
 
                 const parts = [];
-                if (
-                    daily &&
-                    Array.isArray(daily.temperature_2m_min) &&
-                    Array.isArray(daily.temperature_2m_max) &&
-                    typeof daily.temperature_2m_min[0] === "number" &&
-                    typeof daily.temperature_2m_max[0] === "number"
-                ) {
-                    parts.push(`今日 ${Math.round(daily.temperature_2m_min[0])}~${Math.round(daily.temperature_2m_max[0])}°C`);
+                if (record.todayMin !== null && record.todayMax !== null) {
+                    parts.push(`今日 ${record.todayMin}~${record.todayMax}°C`);
                 }
-                if (
-                    daily &&
-                    Array.isArray(daily.temperature_2m_min) &&
-                    Array.isArray(daily.temperature_2m_max) &&
-                    typeof daily.temperature_2m_min[1] === "number" &&
-                    typeof daily.temperature_2m_max[1] === "number"
-                ) {
-                    const tmrwInfo = Array.isArray(daily.weather_code)
-                        ? weatherCodeInfo(daily.weather_code[1], 1)
-                        : null;
-                    const tmrwCond = tmrwInfo ? `${tmrwInfo.text} ` : "";
-                    parts.push(`明日 ${tmrwCond}${Math.round(daily.temperature_2m_min[1])}~${Math.round(daily.temperature_2m_max[1])}°C`);
+                if (record.tomorrowMin !== null && record.tomorrowMax !== null) {
+                    const tmrwCond = record.tomorrowCond ? `${record.tomorrowCond} ` : "";
+                    parts.push(`明日 ${tmrwCond}${record.tomorrowMin}~${record.tomorrowMax}°C`);
                 }
-                if (typeof cur.relative_humidity_2m === "number") {
-                    parts.push(`湿度 ${Math.round(cur.relative_humidity_2m)}%`);
+                if (record.humidity !== null) {
+                    parts.push(`湿度 ${record.humidity}%`);
                 }
-                if (typeof cur.wind_speed_10m === "number") {
-                    parts.push(`风速 ${Math.round(cur.wind_speed_10m)}km/h`);
+                if (record.windText) {
+                    parts.push(record.windText);
                 }
 
                 if (parts.length > 0) {
@@ -1525,6 +1598,28 @@
                 }
 
                 return item;
+            }
+
+            /** Concurrently fetches weather for all configured cities from the primary domestic API. */
+            async function fetchWeatherFromUapis() {
+                const settled = await Promise.allSettled(
+                    WEATHER_CITIES.map((city) => {
+                        const url = `${UAPIS_WEATHER_BASE}?city=${encodeURIComponent(city.name)}&extended=true&forecast=true`;
+                        return fetchJsonWithTimeout(url, 6000).then((data) => normalizeUapisEntry(city.name, data));
+                    })
+                );
+                return settled.map((res) => (res.status === "fulfilled" ? res.value : null));
+            }
+
+            /** Fetches weather for all configured cities in one batch from the overseas Open-Meteo fallback API. */
+            async function fetchWeatherFromOpenMeteo() {
+                try {
+                    const raw = await fetchJsonWithTimeout(OPEN_METEO_ENDPOINT, 8000);
+                    const list = Array.isArray(raw) ? raw : [raw];
+                    return WEATHER_CITIES.map((city, idx) => normalizeOpenMeteoEntry(city.name, list[idx]));
+                } catch {
+                    return WEATHER_CITIES.map(() => null);
+                }
             }
 
             function renderWeatherStatic(message, withRetry) {
@@ -1549,15 +1644,21 @@
             async function loadWeather() {
                 const reqId = ++weatherReqSeq;
                 try {
-                    const resp = await fetch(WEATHER_ENDPOINT, { cache: "no-store" });
-                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                    const raw = await resp.json();
+                    // Try primary domestic CORS API first; only query overseas Open-Meteo for missing/failed cities
+                    const records = await fetchWeatherFromUapis();
                     if (reqId !== weatherReqSeq) return;
 
-                    const list = Array.isArray(raw) ? raw : [raw];
-                    const items = WEATHER_CITIES
-                        .map((city, idx) => buildWeatherItem(city.name, list[idx]))
-                        .filter(Boolean);
+                    if (records.some((entry) => !entry)) {
+                        const fallback = await fetchWeatherFromOpenMeteo();
+                        if (reqId !== weatherReqSeq) return;
+                        for (let i = 0; i < records.length; i++) {
+                            if (!records[i] && fallback[i]) {
+                                records[i] = fallback[i];
+                            }
+                        }
+                    }
+
+                    const items = records.map(buildWeatherItem).filter(Boolean);
 
                     if (items.length === 0) {
                         renderWeatherStatic("暂未获取到天气数据", true);

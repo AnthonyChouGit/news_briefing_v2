@@ -81,24 +81,30 @@ function collapseWhitespace(s: string): string {
 // ─── HTML Extractors ─────────────────────────────────────────
 
 /**
- * BBC articles use `data-component="text-block"` wrappers around `<p>` tags.
- * Fallback: all `<p>` tags with content longer than 40 chars.
+ * BBC articles (`BBC`, `BBC Sport`, `BBC China`):
+ * 1. Matches legacy `data-component="text-block"` wrappers.
+ * 2. Falls back to `<article>...</article>` via `extractParagraphsFromContainer` (current BBC layout),
+ *    avoiding header navigation boilerplate (`BBC Homepage Skip to content...`).
+ * 3. Falls back to `extractGeneric` if neither container matches.
  */
 function extractBbc(html: string): string {
-    let blocks = [...html.matchAll(/data-component="text-block".*?<p[^>]*>(.*?)<\/p>/gs)]
+    const blocks = [...html.matchAll(/data-component="text-block".*?<p[^>]*>(.*?)<\/p>/gs)]
         .map(m => m[1] ?? "");
-    if (blocks.length === 0) {
-        blocks = [...html.matchAll(/<p[^>]*>(.*?)<\/p>/gs)]
-            .map(m => m[1] ?? "")
-            .filter(p => {
-                const len = stripTags(p).length;
-                return len > 40 && len < 5000;
-            });
+    if (blocks.length > 0) {
+        const paragraphs = blocks
+            .map(b => collapseWhitespace(stripTags(b)))
+            .filter(Boolean);
+        return paragraphs.slice(0, MAX_PARAGRAPHS).join("\n\n");
     }
-    const paragraphs = blocks
-        .map(b => collapseWhitespace(stripTags(b)))
-        .filter(Boolean);
-    return paragraphs.slice(0, MAX_PARAGRAPHS).join("\n\n");
+
+    // Modern BBC pages omit `data-component="text-block"` and render body copy inside `<article>`
+    const article = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+    return extractParagraphsFromContainer(
+        article?.[1],
+        html,
+        25,
+        (p) => p.includes("Skip to content"),
+    );
 }
 
 /**
@@ -282,6 +288,43 @@ function extractInfoq(html: string): string {
     );
 }
 
+/** China Daily articles wrap body paragraphs inside `<div id="Content">`. */
+function extractChinaDaily(html: string): string {
+    const body = html.match(/<div[^>]*id=["']Content["'][^>]*>([\s\S]*?)<\/div>/i);
+    return extractParagraphsFromContainer(body?.[1], html, 15);
+}
+
+/** ECNS articles place body paragraphs inside `<div class="content" id="yanse">` (or `id="yanse"` / `class="content"`). */
+function extractEcns(html: string): string {
+    const body =
+        html.match(/<div[^>]*class="[^"]*\bcontent\b[^"]*"[^>]*id=["']yanse["'][^>]*>([\s\S]*?)<\/div>/i) ??
+        html.match(/<div[^>]*id=["']yanse["'][^>]*>([\s\S]*?)<\/div>/i) ??
+        html.match(/<div[^>]*class=["']content["'][^>]*>([\s\S]*?)<\/div>/i);
+    return extractParagraphsFromContainer(body?.[1], html, 15);
+}
+
+/**
+ * CGTN articles place story copy inside `<div class="text en">` blocks,
+ * excluding site-wide cookie/privacy banner paragraphs.
+ */
+function extractCgtn(html: string): string {
+    const blocks = [...html.matchAll(/<div[^>]*class="[^"]*\btext\b[^"]*\ben\b[^"]*"[^>]*>([\s\S]*?)<\/div>/gi)]
+        .map(m => m[1] ?? "")
+        .join("\n");
+    return extractParagraphsFromContainer(
+        blocks || undefined,
+        html,
+        15,
+        (p) => p.includes("agree to our use of cookies") || p.includes("Privacy Statement & Cookie Policy"),
+    );
+}
+
+/** MLB.com articles render story body paragraphs inside `<article>...</article>`. */
+function extractMlb(html: string): string {
+    const article = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+    return extractParagraphsFromContainer(article?.[1], html, 30);
+}
+
 /**
  * Generic fallback extractor for standard article pages.
  * Filters `<p>` tags between 40 and 5000 chars to skip nav links and inline CSS/JS blocks.
@@ -303,6 +346,7 @@ function extractGeneric(html: string): string {
 const SOURCE_NAME_EXTRACTORS: Record<string, HtmlExtractor> = {
     "BBC": extractBbc,
     "BBC Sport": extractBbc,
+    "BBC China": extractBbc,
     "The Guardian": extractGeneric,
     "CNN": extractCnn,
     "TechCrunch": extractTechcrunch,
@@ -313,8 +357,11 @@ const SOURCE_NAME_EXTRACTORS: Record<string, HtmlExtractor> = {
     "Formula 1": extractF1,
     "Motorsport.com": extractMotorsport,
     "RaceFans": extractGeneric,
+    "MLB.com": extractMlb,
     "Global Times": extractGlobalTimes,
-    "CGTN": extractGeneric,
+    "China Daily": extractChinaDaily,
+    "CGTN": extractCgtn,
+    "ECNS": extractEcns,
     "Al Jazeera": extractGeneric,
     "France 24": extractGeneric,
     "中新网": extractChinanews,
@@ -354,10 +401,16 @@ const HOST_EXTRACTORS: Record<string, HtmlExtractor> = {
     "motorsport.com": extractMotorsport,
     "www.racefans.net": extractGeneric,
     "racefans.net": extractGeneric,
+    "www.mlb.com": extractMlb,
+    "mlb.com": extractMlb,
     "www.globaltimes.cn": extractGlobalTimes,
     "globaltimes.cn": extractGlobalTimes,
-    "news.cgtn.com": extractGeneric,
-    "www.cgtn.com": extractGeneric,
+    "www.chinadaily.com.cn": extractChinaDaily,
+    "chinadaily.com.cn": extractChinaDaily,
+    "news.cgtn.com": extractCgtn,
+    "www.cgtn.com": extractCgtn,
+    "www.ecns.cn": extractEcns,
+    "ecns.cn": extractEcns,
     "www.aljazeera.com": extractGeneric,
     "aljazeera.com": extractGeneric,
     "www.france24.com": extractGeneric,
@@ -390,6 +443,7 @@ const SKIP_HOSTS = new Set([
     "bloomberg.com",
     "ft.com",
     "nytimes.com",
+    "scmp.com", // Returns HTTP 403 from US server IPs during article scraping
 ]);
 
 function isSkippedItem(item: BriefNews): boolean {
@@ -429,7 +483,7 @@ function getExtractorForItem(item: BriefNews): HtmlExtractor | null {
 
 /**
  * Extract the article's publication timestamp from common JSON-LD, OpenGraph,
- * `<time datetime>`, and publisher-specific HTML elements (e.g. Global Times `pub_time`).
+ * `<time datetime>`, and publisher-specific HTML elements (e.g. Global Times `pub_time`, ECNS `<span>` timestamps).
  */
 function extractTime(rawHtml: string): Date | undefined {
     const patterns = [
@@ -442,6 +496,8 @@ function extractTime(rawHtml: string): Date | undefined {
         /"pubTime"\s*:\s*"([^"]+)"/,
         /class="source-time">([^<]+)/,
         /class=["']pub_time["'][^>]*>\s*(?:Published:\s*)?([^<]+)/i,
+        // ECNS article pages render Beijing timestamps inside bare `<span>YYYY-MM-DD HH:MM:SS</span>`
+        /<span>(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})<\/span>/,
     ];
 
     for (const pat of patterns) {

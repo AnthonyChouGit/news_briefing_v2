@@ -126,6 +126,7 @@ const BLOCKED_HOSTS = new Set([
     "bloomberg.com",
     "ft.com",
     "nytimes.com",
+    "scmp.com", // Returns HTTP 403 from US server IPs during article scraping
 ]);
 
 /** Validate that a URL is a plausible article URL (not a homepage, search, or Google News wrapper). */
@@ -146,7 +147,8 @@ function isArticleUrl(url: string): boolean {
         ]);
         if (homePaths.has(path)) return false;
         const lowerPath = path.toLowerCase();
-        if (["/search", "/tag/", "/category/", "/topics/", "/video/", "/tp/"].some(x => lowerPath.includes(x))) return false;
+        // Exclude search, tag/category indexes, and media-only video/photo galleries (e.g. ECNS /photo/, ChinaNews /tp/)
+        if (["/search", "/tag/", "/category/", "/topics/", "/video/", "/photo/", "/tp/"].some(x => lowerPath.includes(x))) return false;
         return path.split("/").length >= 2;
     } catch {
         return false;
@@ -516,29 +518,54 @@ function extractTechcrunch(html: string): RawNewsItem[] {
     return results;
 }
 
+/**
+ * Extracts China-channel articles from Global Times (`/china/index.html`) HTML.
+ */
 function extractGlobalTimes(html: string): RawNewsItem[] {
     const results: RawNewsItem[] = [];
     const seenUrls = new Set<string>();
-    // Global Times homepage uses <a> tags with class="new_title_s", "new_title_m", "new_title_ml"
-    const pattern = /<a[^>]*href="(https?:\/\/www\.globaltimes\.cn\/page\/\d+\/\d+\.shtml)"[^>]*class="new_title_[sml][l]?"[^>]*>([^<]+)<\/a>/g;
-    const patternAlt = /<a[^>]*class="new_title_[sml][l]?"[^>]*href="(https?:\/\/www\.globaltimes\.cn\/page\/\d+\/\d+\.shtml)"[^>]*>([^<]+)<\/a>/g;
+    // Global Times uses <a> tags with class="new_title_s", "new_title_m", "new_title_ml", "new_title_ms", "new_title_ss"
+    const pattern = /<a[^>]*href="(https?:\/\/www\.globaltimes\.cn\/page\/\d+\/\d+\.shtml)"[^>]*class="new_title_[a-z]+"[^>]*>([^<]+)<\/a>/g;
+    const patternAlt = /<a[^>]*class="new_title_[a-z]+"[^>]*href="(https?:\/\/www\.globaltimes\.cn\/page\/\d+\/\d+\.shtml)"[^>]*>([^<]+)<\/a>/g;
 
     for (const m of html.matchAll(pattern)) {
         const url = m[1] ?? "";
-        const title = stripTags(m[2] ?? "");
+        const title = stripTags(m[2] ?? "").replace(/\s+/g, " ").trim();
         if (!title || title.length < 10 || !isArticleUrl(url)) continue;
         if (seenUrls.has(url)) continue;
         seenUrls.add(url);
-        results.push({ title, url, time: "", category: "domestic" });
+        results.push({ title, url, time: "", category: "china" });
     }
     // Also match the alternate attribute order (class before href)
     for (const m of html.matchAll(patternAlt)) {
         const url = m[1] ?? "";
-        const title = stripTags(m[2] ?? "");
+        const title = stripTags(m[2] ?? "").replace(/\s+/g, " ").trim();
         if (!title || title.length < 10 || !isArticleUrl(url)) continue;
         if (seenUrls.has(url)) continue;
         seenUrls.add(url);
-        results.push({ title, url, time: "", category: "domestic" });
+        results.push({ title, url, time: "", category: "china" });
+    }
+    return results;
+}
+
+/**
+ * Extracts domestic China news articles from China Daily's `/china` channel HTML.
+ * Normalizes protocol-relative URLs (`//www.chinadaily.com.cn/...`) to `https://`.
+ */
+function extractChinaDailyChina(html: string): RawNewsItem[] {
+    const results: RawNewsItem[] = [];
+    const seenUrls = new Set<string>();
+    const pattern = /<a[^>]*href="((?:https?:)?\/\/www\.chinadaily\.com\.cn\/a\/20\d{2}\d{2}\/\d{2}\/WS[^"]+\.html)"[^>]*>([\s\S]*?)<\/a>/g;
+
+    for (const m of html.matchAll(pattern)) {
+        const rawUrl = m[1] ?? "";
+        const url = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+        const title = stripTags(m[2] ?? "").replace(/\s+/g, " ").trim();
+        // Skip empty image-wrapper anchors and short non-headline links
+        if (!title || title.length < 10 || !isArticleUrl(url)) continue;
+        if (seenUrls.has(url)) continue;
+        seenUrls.add(url);
+        results.push({ title, url, time: "", category: "china" });
     }
     return results;
 }
@@ -672,8 +699,24 @@ async function fetchTechcrunch(options?: FetchOptions): Promise<BriefNews[]> {
     );
 }
 
+/** Fetch China-section headlines directly from Global Times (`/china/index.html`). */
 async function fetchGlobalTimes(options?: FetchOptions): Promise<BriefNews[]> {
-    return fetchAndExtractHtml("https://www.globaltimes.cn/", "Global Times", extractGlobalTimes, options);
+    return fetchAndExtractHtml(
+        "https://www.globaltimes.cn/china/index.html",
+        "Global Times",
+        extractGlobalTimes,
+        options,
+    );
+}
+
+/** Fetch China-section headlines directly from China Daily (`/china`). */
+async function fetchChinaDailyChina(options?: FetchOptions): Promise<BriefNews[]> {
+    return fetchAndExtractHtml(
+        "https://www.chinadaily.com.cn/china",
+        "China Daily",
+        extractChinaDailyChina,
+        options,
+    );
 }
 
 // ─── RSS Feed Configuration ─────────────────────────────────
@@ -696,11 +739,6 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
     },
     gn_international: {
         url: "https://news.google.com/rss/search?q=international+news&hl=en-US&gl=US&ceid=US:en",
-        category: "international",
-        sourceName: "Google News",
-    },
-    gn_chinanews: {
-        url: "https://news.google.com/rss/search?q=China&hl=en-US&gl=US&ceid=US:en",
         category: "international",
         sourceName: "Google News",
     },
@@ -764,9 +802,11 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
         category: "ai",
         sourceName: "Google News",
     },
+    // China domestic news feeds (verified accessible from US server IPs):
+    // CGTN dedicated China section RSS
     cgtn_china: {
         url: "https://www.cgtn.com/subscribe/rss/section/china.xml",
-        category: "domestic",
+        category: "china",
         sourceName: "CGTN",
     },
     gn_football: {
@@ -789,15 +829,29 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
         category: "sports",
         sourceName: "Motorsport.com",
     },
-    chinanews: {
-        url: "https://www.chinanews.com.cn/rss/scroll-news.xml",
-        category: "domestic",
+    // China News Service dedicated domestic politics/society RSS (`/gn/`, excludes international `/gj/`)
+    chinanews_china: {
+        url: "https://www.chinanews.com.cn/rss/china.xml",
+        category: "china",
         sourceName: "中新网",
     },
-    jiemian: {
-        url: "https://a.jiemian.com/index.php?m=article&a=rss",
-        category: "domestic",
-        sourceName: "界面新闻",
+    // China News Service domestic economy & industry RSS (`/cj/`, excludes international `/gj/`)
+    chinanews_finance: {
+        url: "https://www.chinanews.com.cn/rss/finance.xml",
+        category: "china",
+        sourceName: "中新网",
+    },
+    // China News Service English wire (`ecns.cn`) listed on Feedspot; 0 world-news items
+    ecns: {
+        url: "https://www.ecns.cn/rss/rss.xml",
+        category: "china",
+        sourceName: "ECNS",
+    },
+    // BBC China desk RSS listed on Feedspot; hosted on BBC's global CDN for reliable US IP scraping
+    bbc_china: {
+        url: "https://feeds.bbci.co.uk/news/world/asia/china/rss.xml",
+        category: "china",
+        sourceName: "BBC China",
     },
     qbitai: {
         url: "https://www.qbitai.com/feed",
@@ -852,7 +906,9 @@ async function fetchRssFeed(feedKey: string, options?: FetchOptions): Promise<Br
             }
 
             // Validate that the final URL is a plausible article URL (skip if not)
-            if (item.url && !isArticleUrl(item.url)) continue;
+            if (!isArticleUrl(item.url)) continue;
+            // Normalize RSS links (e.g., percent-encode spaces or non-ASCII characters)
+            item.url = new URL(item.url).href;
 
             results.push(toBriefNews(item, config.sourceName));
         }
@@ -877,7 +933,6 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("aljazeera", opts),
         (opts) => fetchRssFeed("france24", opts),
         (opts) => fetchRssFeed("gn_international", opts),
-        (opts) => fetchRssFeed("gn_chinanews", opts),
     ],
     sports: [
         // Football
@@ -908,11 +963,14 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("tmtpost", opts),
         (opts) => fetchRssFeed("infoq_cn", opts),
     ],
-    domestic: [
+    china: [
         fetchGlobalTimes,
+        fetchChinaDailyChina,
         (opts) => fetchRssFeed("cgtn_china", opts),
-        (opts) => fetchRssFeed("chinanews", opts),
-        (opts) => fetchRssFeed("jiemian", opts),
+        (opts) => fetchRssFeed("chinanews_china", opts),
+        (opts) => fetchRssFeed("chinanews_finance", opts),
+        (opts) => fetchRssFeed("ecns", opts),
+        (opts) => fetchRssFeed("bbc_china", opts),
     ],
 };
 
