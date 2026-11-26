@@ -853,6 +853,55 @@ const RSS_FEEDS: Record<string, RssFeedConfig> = {
         category: "china",
         sourceName: "BBC China",
     },
+    // Philippine local & national news feeds (all verified HTTP 200 from US server IPs):
+    // The Philippine Star top national headlines RSS
+    philstar_headlines: {
+        url: "https://www.philstar.com/rss/headlines",
+        category: "philippines",
+        sourceName: "Philstar",
+    },
+    // The Philippine Star regional & provincial news RSS
+    philstar_nation: {
+        url: "https://www.philstar.com/rss/nation",
+        category: "philippines",
+        sourceName: "Philstar",
+    },
+    // GMA News Online national desk RSS
+    gma_nation: {
+        url: "https://data.gmanetwork.com/gno/rss/news/nation/feed.xml",
+        category: "philippines",
+        sourceName: "GMA News",
+    },
+    // GMA News Online Metro Manila local desk RSS
+    gma_metro: {
+        url: "https://data.gmanetwork.com/gno/rss/news/metro/feed.xml",
+        category: "philippines",
+        sourceName: "GMA News",
+    },
+    // Rappler dedicated Philippines news section RSS
+    rappler_ph: {
+        url: "https://www.rappler.com/philippines/feed/",
+        category: "philippines",
+        sourceName: "Rappler",
+    },
+    // The Manila Times national news desk RSS
+    manilatimes_national: {
+        url: "https://www.manilatimes.net/news/national/feed/",
+        category: "philippines",
+        sourceName: "The Manila Times",
+    },
+    // BusinessWorld domestic "The Nation" news RSS
+    bworld_nation: {
+        url: "https://www.bworldonline.com/the-nation/feed/",
+        category: "philippines",
+        sourceName: "BusinessWorld",
+    },
+    // BusinessWorld top Philippine policy & economy stories RSS
+    bworld_top: {
+        url: "https://www.bworldonline.com/top-stories/feed/",
+        category: "philippines",
+        sourceName: "BusinessWorld",
+    },
     qbitai: {
         url: "https://www.qbitai.com/feed",
         category: "ai",
@@ -971,6 +1020,17 @@ const CATEGORY_SOURCES: Record<NewsCategory, SourceFetcher[]> = {
         (opts) => fetchRssFeed("chinanews_finance", opts),
         (opts) => fetchRssFeed("ecns", opts),
         (opts) => fetchRssFeed("bbc_china", opts),
+    ],
+    // Flagship Philippine local news outlets accessible from US server IPs
+    philippines: [
+        (opts) => fetchRssFeed("philstar_headlines", opts),
+        (opts) => fetchRssFeed("philstar_nation", opts),
+        (opts) => fetchRssFeed("gma_nation", opts),
+        (opts) => fetchRssFeed("gma_metro", opts),
+        (opts) => fetchRssFeed("rappler_ph", opts),
+        (opts) => fetchRssFeed("manilatimes_national", opts),
+        (opts) => fetchRssFeed("bworld_nation", opts),
+        (opts) => fetchRssFeed("bworld_top", opts),
     ],
 };
 

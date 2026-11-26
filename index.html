@@ -26,6 +26,8 @@
             --cat-international-fg: #3730a3;
             --cat-china-bg: #ecfdf5;
             --cat-china-fg: #047857;
+            --cat-philippines-bg: #ecfeff;
+            --cat-philippines-fg: #0e7490;
             --cat-ai-bg: #f5f3ff;
             --cat-ai-fg: #6d28d9;
             --cat-sports-bg: #fff7ed;
@@ -56,6 +58,8 @@
             --cat-international-fg: #a5b4fc;
             --cat-china-bg: rgba(16, 185, 129, 0.16);
             --cat-china-fg: #6ee7b7;
+            --cat-philippines-bg: rgba(6, 182, 212, 0.16);
+            --cat-philippines-fg: #67e8f9;
             --cat-ai-bg: rgba(139, 92, 246, 0.16);
             --cat-ai-fg: #c4b5fd;
             --cat-sports-bg: rgba(249, 115, 22, 0.16);
@@ -610,6 +614,7 @@
 
         .cat-international { background: var(--cat-international-bg); color: var(--cat-international-fg); }
         .cat-china         { background: var(--cat-china-bg);         color: var(--cat-china-fg); }
+        .cat-philippines   { background: var(--cat-philippines-bg);   color: var(--cat-philippines-fg); }
         .cat-ai            { background: var(--cat-ai-bg);            color: var(--cat-ai-fg); }
         .cat-sports        { background: var(--cat-sports-bg);        color: var(--cat-sports-fg); }
         .cat-default       { background: var(--surface-muted);        color: var(--text-secondary); }
@@ -912,11 +917,13 @@
                 china: { label: "中国", cls: "cat-china" },
                 // Backward-compatible alias for archived editions exported before `domestic` was renamed
                 domestic: { label: "中国", cls: "cat-china" },
+                // Philippine local news category
+                philippines: { label: "菲律宾", cls: "cat-philippines" },
                 ai: { label: "AI 科技", cls: "cat-ai" },
                 sports: { label: "体育", cls: "cat-sports" },
             };
 
-            const CATEGORY_ORDER = ["international", "china", "domestic", "ai", "sports"];
+            const CATEGORY_ORDER = ["international", "china", "domestic", "philippines", "ai", "sports"];
 
             const state = {
                 issue: "latest",

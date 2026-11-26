@@ -81,10 +81,11 @@ export function createNewsBriefingDag(): LightDag {
         .mapInput("summarize_input_items", "pre_summarize_selected_items")
         .mapOutput("summarized_items", "summarized_items");
 
-    /** Rank #2: re-rank & deduplicate summarized items without historical context. */
-    const post_summarize_rank_news_op = new RankNewsOperator(false)
+    /** Rank #2: re-rank & perform second-pass history deduplication using full summarized titles and bullets. */
+    const post_summarize_rank_news_op = new RankNewsOperator()
         .setName("post_summarize_rank_news")
         .mapInput("rank_input_items", "summarized_items")
+        .mapInput("history_items", "history_items")
         .mapOutput("ranked_items", "post_summarize_ranked_items");
 
     /** Select #3: lock in the exact target number of final news items per category. */

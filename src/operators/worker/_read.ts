@@ -212,6 +212,42 @@ function extractGlobalTimes(html: string): string {
 }
 
 /**
+ * Extract the inner HTML of the first `<div>` matching `className` while tracking
+ * nested `<div>` / `</div>` tags so embedded ad, caption, or widget wrappers do not
+ * truncate the article body prematurely. Strips `<script>` and `<style>` blocks first.
+ */
+function extractBalancedDivByClass(html: string, className: string): string | undefined {
+    const cleaned = html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "");
+    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const openMatch = new RegExp(
+        `<div[^>]*class=["'][^"']*\\b${escaped}\\b[^"']*["'][^>]*>`,
+        "i",
+    ).exec(cleaned);
+    if (!openMatch) return undefined;
+
+    const start = openMatch.index + openMatch[0].length;
+    // Track nesting depth across inner <div> tags (ignoring self-closing <div .../>)
+    let depth = 1;
+    const tagRe = /<\/?div\b[^>]*>/gi;
+    tagRe.lastIndex = start;
+    let tagMatch: RegExpExecArray | null;
+    while ((tagMatch = tagRe.exec(cleaned)) !== null) {
+        const tag = tagMatch[0];
+        if (tag.startsWith("</")) {
+            depth--;
+        } else if (!tag.endsWith("/>")) {
+            depth++;
+        }
+        if (depth === 0) {
+            return cleaned.slice(start, tagMatch.index);
+        }
+    }
+    return cleaned.slice(start);
+}
+
+/**
  * Shared helper for extracting clean `<p>` paragraphs from a matched article container,
  * stripping inline scripts/styles and falling back to `extractGeneric`.
  */
@@ -326,6 +362,67 @@ function extractMlb(html: string): string {
 }
 
 /**
+ * The Philippine Star (`philstar.com`) renders story paragraphs inside `.article__writeup`
+ * (falling back to `.article__content`) with nested social/ad `<div>` wrappers.
+ */
+function extractPhilstar(html: string): string {
+    const container =
+        extractBalancedDivByClass(html, "article__writeup") ??
+        extractBalancedDivByClass(html, "article__content");
+    return extractParagraphsFromContainer(container, html, 20);
+}
+
+/**
+ * GMA News Online (`gmanetwork.com`) renders body paragraphs inside `.story_main`
+ * and appends a social-follow promotional line that we strip.
+ */
+function extractGmaNews(html: string): string {
+    const container = extractBalancedDivByClass(html, "story_main");
+    return extractParagraphsFromContainer(
+        container,
+        html,
+        20,
+        (p) => p.startsWith("Follow GMA News Online"),
+    );
+}
+
+/**
+ * Rappler (`rappler.com`) wraps article body paragraphs inside `.post-single__content`
+ * (falling back to `.entry-content`), containing nested chart and embed `<div>` blocks.
+ */
+function extractRappler(html: string): string {
+    const container =
+        extractBalancedDivByClass(html, "post-single__content") ??
+        extractBalancedDivByClass(html, "entry-content");
+    return extractParagraphsFromContainer(container, html, 20);
+}
+
+/**
+ * The Manila Times (`manilatimes.net`) places article body paragraphs inside `.article-body-content`
+ * (falling back to `.article-body`) interspersed with inline script and ad `<div>` blocks.
+ */
+function extractManilaTimes(html: string): string {
+    const container =
+        extractBalancedDivByClass(html, "article-body-content") ??
+        extractBalancedDivByClass(html, "article-body");
+    return extractParagraphsFromContainer(container, html, 20);
+}
+
+/**
+ * BusinessWorld (`bworldonline.com`) places article body paragraphs inside `.entry-content`
+ * and appends a Viber channel promo paragraph that we exclude.
+ */
+function extractBusinessWorld(html: string): string {
+    const container = extractBalancedDivByClass(html, "entry-content");
+    return extractParagraphsFromContainer(
+        container,
+        html,
+        20,
+        (p) => p.startsWith("Join us on Viber"),
+    );
+}
+
+/**
  * Generic fallback extractor for standard article pages.
  * Filters `<p>` tags between 40 and 5000 chars to skip nav links and inline CSS/JS blocks.
  */
@@ -369,6 +466,12 @@ const SOURCE_NAME_EXTRACTORS: Record<string, HtmlExtractor> = {
     "量子位": extractQbitai,
     "钛媒体": extractTmtpost,
     "InfoQ 中文": extractInfoq,
+    // Philippine local news outlets
+    "Philstar": extractPhilstar,
+    "GMA News": extractGmaNews,
+    "Rappler": extractRappler,
+    "The Manila Times": extractManilaTimes,
+    "BusinessWorld": extractBusinessWorld,
 };
 
 /**
@@ -425,6 +528,17 @@ const HOST_EXTRACTORS: Record<string, HtmlExtractor> = {
     "tmtpost.com": extractTmtpost,
     "www.infoq.cn": extractInfoq,
     "infoq.cn": extractInfoq,
+    // Philippine local news outlets
+    "www.philstar.com": extractPhilstar,
+    "philstar.com": extractPhilstar,
+    "www.gmanetwork.com": extractGmaNews,
+    "gmanetwork.com": extractGmaNews,
+    "www.rappler.com": extractRappler,
+    "rappler.com": extractRappler,
+    "www.manilatimes.net": extractManilaTimes,
+    "manilatimes.net": extractManilaTimes,
+    "www.bworldonline.com": extractBusinessWorld,
+    "bworldonline.com": extractBusinessWorld,
 };
 
 /**

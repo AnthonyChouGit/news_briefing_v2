@@ -12,7 +12,7 @@ The pipeline is orchestrated by a singleton `LightDag` instance (`news_briefing_
   <img src="docs/architecture.svg" alt="News Briefing v2 LightDAG Pipeline" width="100%" />
 </p>
 
-- **Consolidated Categories & Per-Source Limits:** Supports `international`, `china` (China domestic news verified for US accessibility: Global Times China, China Daily China, CGTN China, China News China/Finance, ECNS, BBC China), `ai`, and focused `sports` (Football including Real Madrid, Formula 1, Baseball/MLB, and Table Tennis/WTT). Enforces configurable per-source caps (`fetch_max_items_per_source`, default `20`), Google News decode caps (`fetch_max_decode_items`), and canonical URL deduplication.
+- **Consolidated Categories & Per-Source Limits:** Supports `international`, `china` (China domestic news verified for US accessibility: Global Times China, China Daily China, CGTN China, China News China/Finance, ECNS, BBC China), `philippines` (Philippine local & national news: Philstar, GMA News, Rappler, The Manila Times, BusinessWorld), `ai`, and focused `sports` (Football including Real Madrid, Formula 1, Baseball/MLB, and Table Tennis/WTT). Enforces configurable per-source caps (`fetch_max_items_per_source`, default `20`), Google News decode caps (`fetch_max_decode_items`), and canonical URL deduplication.
 - **Two-Stage AI Ranking & Three-Stage Selection Funnel:** `pre_read_rank_news` filters ads, boilerplate, and duplicates (intra-batch and against PostgreSQL history) before `pre_read_select_news` limits scraping load. After full-text extraction and recency filtering, `pre_summarize_select_news` bounds LLM summarization costs, followed by `post_summarize_rank_news` and `post_summarize_select_news` to guarantee exact per-category output counts.
 - **Lean AI Context (`raw` Isolated to Summarization):** [`BriefNewsRepository.findRecentByHours`](src/utils/db.ts) excludes stored `raw` bodies when loading history, and [`RankNewsOperator`](src/operators/rankNews.operator.ts) strips `raw` from AI ranking payloads so full article bodies are sent only during [`SummarizeNewsOperator`](src/operators/summarizeNews.operator.ts) and archived to PostgreSQL.
 - **Parallel Off-Thread Scraping:** Dispatches RSS/HTML fetching (`_fetch.ts`) and full-text / publication-date extraction (`_read.ts`) to a [Piscina](https://github.com/piscinajs/piscina) worker pool with cooperative `AbortSignal` cancellation, followed by [`FilterRecencyOperator`](src/operators/filterRecency.operator.ts).
@@ -53,7 +53,7 @@ Edit `.env` with your PostgreSQL credentials, AI provider key/model, active cate
 | `ai_timeout` | No | `300000` | AI request timeout in milliseconds |
 | `ai_max_retries` | No | `3` | Automatic retry count (`0` disables retries) |
 | `ai_max_output_tokens` | No | `16384` | Max generated output tokens per request (`65536` in `example.env`) |
-| `categories` | Yes | — | Comma-separated categories: `international, china, ai, sports` |
+| `categories` | Yes | — | Comma-separated categories: `international, china, philippines, ai, sports` |
 | `pre_read_select_count_by_category` | Yes | — | JSON map of max candidates per category before `read_news` |
 | `pre_summarize_select_count_by_category` | Yes | — | JSON map of max candidates per category before `summarize_news` |
 | `post_summarize_select_count_by_category` | Yes | — | JSON map of final items per category in exported briefing |

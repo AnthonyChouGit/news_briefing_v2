@@ -121,10 +121,14 @@ function buildRankInstruction(
         ? ` For the \`sports\` category, balance and interleave top-ranked items across the configured \`target_sports\` (${sportsList}) whenever substantive stories exist across them, rather than letting a single sport or club monopolize the top positions.`
         : "";
 
+    // Enforce strict event-level history exclusion so parallel outlet coverage or verbal reactions
+    // do not repeat across consecutive briefings unless a concrete outcome-changing milestone occurred.
     const historyDedupeSection = hasHistory
-        ? `2. **Cross-History Deduplication against \`covered\`**:
-   - Exclude any candidate reporting the **same underlying news event** as any article in \`covered\`.
-   - **Strict New-Development Exception**: Keep a candidate covering a previously reported event ONLY if it introduces a genuinely substantive new development (e.g., an official verdict/outcome, major escalation, reversal, concrete new official response, or materially new key facts/figures). Reworded summaries, minor details, routine commentary, or another outlet repeating the same story MUST be excluded.`
+        ? `2. **Cross-History Deduplication against \`covered\` (Strict Default-Exclude)**:
+   - By default, **EXCLUDE** any candidate reporting the **same underlying news event, incident, or ongoing storyline** as any article in \`covered\` — even if published by a different media outlet, written in a different language (e.g., matching English candidate headlines against \`covered\` items in Chinese or another language), framed from a different angle, or citing slightly different figures/estimates.
+   - When a candidate includes \`bullets\` (post-summarization stage), compare its \`title\` AND \`bullets\` closely against \`covered\` \`title\` + \`bullets\`; if most of the core facts recap an already-covered event, **EXCLUDE** it.
+   - **Strict Milestone-Only Exception**: Keep a follow-up candidate covering a previously reported event ONLY when a **distinct, concrete, outcome-changing milestone** has actually occurred AFTER the \`covered\` report (such as an official court verdict/ruling, a binding agreement/treaty signed or broken, a major new physical escalation/incident, or an official policy reversal/resignation) AND the candidate's primary focus is that new milestone rather than summarizing prior background.
+   - **NEVER Keep Mere Reactions or Parallel Recaps**: EXCLUDE follow-ups whose primary "new" content consists only of verbal reactions, vows, threats, condemnations, spokesperson/official statements, analyst commentary, background explainers, or another outlet's parallel report on the same event.`
         : `2. **No Historical Context**:
    - \`has_history\` is \`false\` and no historical articles are provided. Do NOT perform cross-history deduplication or speculate about previously covered briefings.`;
 
@@ -163,7 +167,7 @@ OMIT from your output any candidate that falls into these categories:
 
 ### Step 2: Deduplication
 1. **Intra-Batch Deduplication (Always Apply)**:
-   - When multiple \`candidates\` report on the **same underlying news event** (even from different sources or phrased differently), keep **ONLY ONE** representative item and drop all others.
+   - When multiple \`candidates\` report on the **same underlying news event** (even from different sources or phrased differently), keep **ONLY ONE** representative item and drop all others. When \`bullets\` are present, compare core facts across \`bullets\` (not just headlines) to detect same-event overlaps across outlets.
    - Choose the single best representative prioritizing: most advanced/latest development stage > richest factual detail > higher media authority (\`source_name\`) > fresher valid \`source_date\`.
 ${historyDedupeSection}
 

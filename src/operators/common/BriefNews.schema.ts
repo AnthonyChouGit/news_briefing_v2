@@ -3,6 +3,7 @@ import * as z from "zod";
 export const NewsCategorySchema = z.enum([
     "international",
     "china",
+    "philippines", // Philippine local & national news
     "ai",
     "sports",
 ]);
